@@ -2,7 +2,7 @@ package main
 
 import (
 	"fmt"
-	"github.com/davidkroell/edurouter/arp"
+	"github.com/davidkroell/edurouter/ifconfigv4"
 	"github.com/mdlayher/ethernet"
 	"github.com/mdlayher/raw"
 	"log"
@@ -11,13 +11,13 @@ import (
 )
 
 func main() {
-	arpConfig, err := arp.NewConfig("wlp0s20f3", []byte{0x0, 0x93, 0x37, 0x79, 0x06, 0x85}, []byte{192, 168, 0, 80})
+	arpConfig, err := ifconfigv4.NewInterfaceConfig("wlp0s20f3", []byte{0x0, 0x93, 0x37, 0x79, 0x06, 0x85}, []byte{192, 168, 0, 80}, 24)
 	if err != nil {
 		log.Println(err)
 		return
 	}
 
-	arp.ListenAndServe(arpConfig)
+	ifconfigv4.ListenAndServe(arpConfig)
 }
 
 func main1() {
