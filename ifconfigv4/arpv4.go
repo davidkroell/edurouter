@@ -2,6 +2,7 @@ package ifconfigv4
 
 import (
 	"bytes"
+	"encoding/binary"
 	"io"
 )
 
@@ -17,35 +18,49 @@ var emptyHardwareAddr = []byte{
 	0x0, 0x0, 0x0,
 }
 
+type LinkLayerResultPdu interface {
+	SenderHardwareAddr() []byte
+	TargetHardwareAddr() []byte
+	MarshalBinary() ([]byte, error)
+}
+
 type arpPacket struct {
-	HTYPE              uint16
-	PTYPE              uint16
-	HLEN               uint8
-	PLEN               uint8
-	Operation          arpOperation
-	SenderHardwareAddr []byte
-	SenderProtoAddr    []byte
-	TargetHardwareAddr []byte
-	TargetProtoAddr    []byte
+	hardwareType       uint16
+	protoType          uint16
+	hardwareLen        uint8
+	protoLen           uint8
+	operation          arpOperation
+	senderHardwareAddr []byte
+	senderProtoAddr    []byte
+	targetHardwareAddr []byte
+	targetProtoAddr    []byte
+}
+
+func (a *arpPacket) SenderHardwareAddr() []byte {
+	return a.senderHardwareAddr
+}
+
+func (a *arpPacket) TargetHardwareAddr() []byte {
+	return a.targetHardwareAddr
 }
 
 func (a *arpPacket) isEthernetAndIPv4() bool {
-	if a.HTYPE != 1 {
+	if a.hardwareType != 1 {
 		// not ethernet
 		return false
 	}
 
-	if a.PTYPE != ipv4EtherType {
+	if a.protoType != ipv4EtherType {
 		// not IPv4
 		return false
 	}
 
-	if a.HLEN != hardwareAddrSize {
+	if a.hardwareLen != hardwareAddrSize {
 		// MAC's are 6 bytes
 		return false
 	}
 
-	if a.PLEN != ipAddrSize {
+	if a.protoLen != ipAddrSize {
 		// IP's are 4 bytes
 		return false
 	}
@@ -54,17 +69,17 @@ func (a *arpPacket) isEthernetAndIPv4() bool {
 }
 
 func (a *arpPacket) isArpRequestForConfig(config *InterfaceConfig) bool {
-	if a.Operation != arpOperationRequest {
+	if a.operation != arpOperationRequest {
 		// not request
 		return false
 	}
 
-	if !bytes.Equal(a.TargetHardwareAddr, emptyHardwareAddr) {
+	if !bytes.Equal(a.targetHardwareAddr, emptyHardwareAddr) {
 		// something went wrong, should be empty
 		return false
 	}
 
-	if !bytes.Equal(a.TargetProtoAddr, config.IPAddr) {
+	if !bytes.Equal(a.targetProtoAddr, config.IPAddr) {
 		// targetAddr should be the same
 		return false
 	}
@@ -73,40 +88,40 @@ func (a *arpPacket) isArpRequestForConfig(config *InterfaceConfig) bool {
 
 func (a *arpPacket) buildArpResponseWithConfig(config *InterfaceConfig) *arpPacket {
 	return &arpPacket{
-		HTYPE:     a.HTYPE,
-		PTYPE:     a.PTYPE,
-		HLEN:      a.HLEN,
-		PLEN:      a.PLEN,
-		Operation: arpOperationResponse,
+		hardwareType: a.hardwareType,
+		protoType:    a.protoType,
+		hardwareLen:  a.hardwareLen,
+		protoLen:     a.protoLen,
+		operation:    arpOperationResponse,
 
 		// provide configured mac as sender
-		SenderHardwareAddr: config.HardwareAddr,
-		SenderProtoAddr:    config.IPAddr,
+		senderHardwareAddr: config.HardwareAddr,
+		senderProtoAddr:    config.IPAddr,
 
 		// flip original sender to target
-		TargetHardwareAddr: a.SenderHardwareAddr,
-		TargetProtoAddr:    a.TargetProtoAddr,
+		targetHardwareAddr: a.senderHardwareAddr,
+		targetProtoAddr:    a.senderProtoAddr,
 	}
 }
 
-func (a *arpPacket) MarshallBinary() []byte {
+func (a *arpPacket) MarshalBinary() ([]byte, error) {
 	b := make([]byte, 28)
 
-	b[0] = byte(a.HTYPE >> 8)
-	b[1] = byte(a.HTYPE)
-	b[2] = byte(a.PTYPE >> 8)
-	b[3] = byte(a.PTYPE)
-	b[4] = a.HLEN
-	b[5] = a.PLEN
-	b[6] = byte(a.Operation >> 8)
-	b[7] = byte(a.Operation)
+	b[0] = byte(a.hardwareType >> 8)
+	b[1] = byte(a.hardwareType)
+	b[2] = byte(a.protoType >> 8)
+	b[3] = byte(a.protoType)
+	b[4] = a.hardwareLen
+	b[5] = a.protoLen
+	b[6] = byte(a.operation >> 8)
+	b[7] = byte(a.operation)
 
-	copy(b[8:], a.SenderHardwareAddr)
-	copy(b[14:], a.SenderProtoAddr)
-	copy(b[18:], a.TargetHardwareAddr)
-	copy(b[24:], a.TargetProtoAddr)
+	copy(b[8:], a.senderHardwareAddr)
+	copy(b[14:], a.senderProtoAddr)
+	copy(b[18:], a.targetHardwareAddr)
+	copy(b[24:], a.targetProtoAddr)
 
-	return b
+	return b, nil
 }
 
 func (a *arpPacket) UnmarshalBinary(payload []byte) error {
@@ -114,15 +129,15 @@ func (a *arpPacket) UnmarshalBinary(payload []byte) error {
 		return io.ErrUnexpectedEOF
 	}
 
-	a.HTYPE = uint16(payload[0])<<8 | uint16(payload[1])
-	a.PTYPE = uint16(payload[2])<<8 | uint16(payload[3])
-	a.HLEN = payload[4]
-	a.PLEN = payload[5]
-	a.Operation = arpOperation(payload[6])<<8 | arpOperation(payload[7])
-	a.SenderHardwareAddr = payload[8:14]
-	a.SenderProtoAddr = payload[14:18]
-	a.TargetHardwareAddr = payload[18:24]
-	a.TargetProtoAddr = payload[24:28]
+	a.hardwareType = binary.BigEndian.Uint16(payload[0:2])
+	a.protoType = binary.BigEndian.Uint16(payload[2:4])
+	a.hardwareLen = payload[4]
+	a.protoLen = payload[5]
+	a.operation = arpOperation(binary.BigEndian.Uint16(payload[6:8]))
+	a.senderHardwareAddr = payload[8:14]
+	a.senderProtoAddr = payload[14:18]
+	a.targetHardwareAddr = payload[18:24]
+	a.targetProtoAddr = payload[24:28]
 
 	return nil
 }

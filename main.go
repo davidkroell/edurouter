@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"github.com/davidkroell/edurouter/ifconfigv4"
 	"github.com/mdlayher/ethernet"
@@ -11,13 +12,17 @@ import (
 )
 
 func main() {
-	arpConfig, err := ifconfigv4.NewInterfaceConfig("wlp0s20f3", []byte{0x0, 0x93, 0x37, 0x79, 0x06, 0x85}, []byte{192, 168, 0, 80}, 24)
+	arpConfig, err := ifconfigv4.NewInterfaceConfig("wlp0s20f3", []byte{0x0, 0x93, 0x37, 0x79, 0x06, 0x85}, []byte{10, 0, 0, 80}, 24)
 	if err != nil {
 		log.Println(err)
 		return
 	}
 
-	ifconfigv4.ListenAndServe(arpConfig)
+	ctx := context.Background()
+
+	listener := ifconfigv4.NewListener(arpConfig)
+
+	listener.ListenAndServe(ctx)
 }
 
 func main1() {
