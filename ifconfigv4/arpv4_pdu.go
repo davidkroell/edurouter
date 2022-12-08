@@ -3,6 +3,7 @@ package ifconfigv4
 import (
 	"bytes"
 	"encoding/binary"
+	"github.com/mdlayher/ethernet"
 	"io"
 )
 
@@ -18,15 +19,9 @@ var emptyHardwareAddr = []byte{
 	0x0, 0x0, 0x0,
 }
 
-type LinkLayerResultPdu interface {
-	SenderHardwareAddr() []byte
-	TargetHardwareAddr() []byte
-	MarshalBinary() ([]byte, error)
-}
-
-type arpPacket struct {
+type arpv4Pdu struct {
 	hardwareType       uint16
-	protoType          uint16
+	protoType          ethernet.EtherType
 	hardwareLen        uint8
 	protoLen           uint8
 	operation          arpOperation
@@ -36,21 +31,21 @@ type arpPacket struct {
 	targetProtoAddr    []byte
 }
 
-func (a *arpPacket) SenderHardwareAddr() []byte {
+func (a *arpv4Pdu) SenderHardwareAddr() []byte {
 	return a.senderHardwareAddr
 }
 
-func (a *arpPacket) TargetHardwareAddr() []byte {
+func (a *arpv4Pdu) TargetHardwareAddr() []byte {
 	return a.targetHardwareAddr
 }
 
-func (a *arpPacket) isEthernetAndIPv4() bool {
+func (a *arpv4Pdu) isEthernetAndIPv4() bool {
 	if a.hardwareType != 1 {
 		// not ethernet
 		return false
 	}
 
-	if a.protoType != ipv4EtherType {
+	if a.protoType != ethernet.EtherTypeARP {
 		// not IPv4
 		return false
 	}
@@ -68,7 +63,7 @@ func (a *arpPacket) isEthernetAndIPv4() bool {
 	return true
 }
 
-func (a *arpPacket) isArpRequestForConfig(config *InterfaceConfig) bool {
+func (a *arpv4Pdu) isArpRequestForConfig(config *InterfaceConfig) bool {
 	if a.operation != arpOperationRequest {
 		// not request
 		return false
@@ -86,8 +81,8 @@ func (a *arpPacket) isArpRequestForConfig(config *InterfaceConfig) bool {
 	return true
 }
 
-func (a *arpPacket) buildArpResponseWithConfig(config *InterfaceConfig) *arpPacket {
-	return &arpPacket{
+func (a *arpv4Pdu) buildArpResponseWithConfig(config *InterfaceConfig) *arpv4Pdu {
+	return &arpv4Pdu{
 		hardwareType: a.hardwareType,
 		protoType:    a.protoType,
 		hardwareLen:  a.hardwareLen,
@@ -104,7 +99,7 @@ func (a *arpPacket) buildArpResponseWithConfig(config *InterfaceConfig) *arpPack
 	}
 }
 
-func (a *arpPacket) MarshalBinary() ([]byte, error) {
+func (a *arpv4Pdu) MarshalBinary() ([]byte, error) {
 	b := make([]byte, 28)
 
 	b[0] = byte(a.hardwareType >> 8)
@@ -124,13 +119,13 @@ func (a *arpPacket) MarshalBinary() ([]byte, error) {
 	return b, nil
 }
 
-func (a *arpPacket) UnmarshalBinary(payload []byte) error {
+func (a *arpv4Pdu) UnmarshalBinary(payload []byte) error {
 	if len(payload) < 27 {
 		return io.ErrUnexpectedEOF
 	}
 
 	a.hardwareType = binary.BigEndian.Uint16(payload[0:2])
-	a.protoType = binary.BigEndian.Uint16(payload[2:4])
+	a.protoType = ethernet.EtherType(binary.BigEndian.Uint16(payload[2:4]))
 	a.hardwareLen = payload[4]
 	a.protoLen = payload[5]
 	a.operation = arpOperation(binary.BigEndian.Uint16(payload[6:8]))
