@@ -3,6 +3,7 @@ package ifconfigv4
 import "errors"
 
 var (
+	HandledPdu                  = errors.New("this pdu is processed. this is intended behaviour")
 	DropPduError                = errors.New("no action for given PDU found. dropping it")
 	NoLinkLayerHandlerError     = errors.New("no link layer handler for given etherType found")
 	UnsupportedArpProtocolError = errors.New("unsupported ARP version. requires ethernet+IPv4")

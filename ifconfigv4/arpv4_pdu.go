@@ -45,7 +45,7 @@ func (a *arpv4Pdu) isEthernetAndIPv4() bool {
 		return false
 	}
 
-	if a.protoType != ethernet.EtherTypeARP {
+	if a.protoType != ethernet.EtherTypeARP && a.protoType != ethernet.EtherTypeIPv4 {
 		// not IPv4
 		return false
 	}
@@ -79,6 +79,10 @@ func (a *arpv4Pdu) isArpRequestForConfig(config *InterfaceConfig) bool {
 		return false
 	}
 	return true
+}
+
+func (a *arpv4Pdu) isArpResponse() bool {
+	return a.operation == arpOperationResponse
 }
 
 func (a *arpv4Pdu) buildArpResponseWithConfig(config *InterfaceConfig) *arpv4Pdu {

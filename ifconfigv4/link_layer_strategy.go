@@ -11,8 +11,8 @@ func (l *linkLayerStrategy) GetHandler(etherType ethernet.EtherType) (LinkLayerH
 	switch etherType {
 	case ethernet.EtherTypeARP:
 		return l.arpHandler, nil
-		//case ipv4EtherType:
-		//	return l.ipv4Handler, nil
+	case ethernet.EtherTypeIPv4:
+		return l.ipv4Handler, nil
 	default:
 		return nil, NoLinkLayerHandlerError
 	}
