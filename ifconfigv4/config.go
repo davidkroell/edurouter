@@ -1,35 +1,36 @@
 package ifconfigv4
 
+import "net"
+
 const (
 	ipAddrSize       = 4
 	hardwareAddrSize = 6
-	maxCidrSize      = 32
 )
 
 type InterfaceConfig struct {
 	InterfaceName string
 	HardwareAddr  []byte
-	IPAddr        []byte
-	CIDRMask      uint8
+	Addr          *net.IPNet
+	RealIPAddr    *net.IPNet
 }
 
-func NewInterfaceConfig(name string, macAddr []byte, ipAddr []byte, cidrMask uint8) (*InterfaceConfig, error) {
-	if len(macAddr) != hardwareAddrSize {
-		return nil, HardwareAddrSizeError
+func NewInterfaceConfig(name string, addr *net.IPNet) (*InterfaceConfig, error) {
+	if addr.IP.To4() == nil {
+		return nil, ErrNotAnIPv4Address
 	}
-
-	if len(ipAddr) != ipAddrSize {
-		return nil, IPAddrSizeError
-	}
-
-	if cidrMask > maxCidrSize {
-		return nil, CIDRMaskError
-	}
+	addr.IP = addr.IP.To4()
 
 	return &InterfaceConfig{
 		InterfaceName: name,
-		HardwareAddr:  macAddr,
-		IPAddr:        ipAddr,
-		CIDRMask:      cidrMask,
+		Addr:          addr,
 	}, nil
+}
+
+func (i *InterfaceConfig) SetRealIP(addr net.Addr) {
+	i.RealIPAddr = addr.(*net.IPNet)
+	i.RealIPAddr.IP = i.RealIPAddr.IP.To4()
+}
+
+func (i *InterfaceConfig) SetRealHardwareAddr(addr net.HardwareAddr) {
+	i.HardwareAddr = addr
 }

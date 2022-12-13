@@ -74,7 +74,7 @@ func (a *arpv4Pdu) isArpRequestForConfig(config *InterfaceConfig) bool {
 		return false
 	}
 
-	if !bytes.Equal(a.targetProtoAddr, config.IPAddr) {
+	if !bytes.Equal(a.targetProtoAddr, config.Addr.IP) {
 		// targetAddr should be the same
 		return false
 	}
@@ -95,7 +95,7 @@ func (a *arpv4Pdu) buildArpResponseWithConfig(config *InterfaceConfig) *arpv4Pdu
 
 		// provide configured mac as sender
 		senderHardwareAddr: config.HardwareAddr,
-		senderProtoAddr:    config.IPAddr,
+		senderProtoAddr:    config.Addr.IP,
 
 		// flip original sender to target
 		targetHardwareAddr: a.senderHardwareAddr,

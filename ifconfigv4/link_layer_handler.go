@@ -35,7 +35,7 @@ func (llh *arpv4LinkLayerHandler) Handle(f ethernet.Frame) (LinkLayerResultPdu, 
 	}
 
 	if !packet.isEthernetAndIPv4() {
-		return nil, UnsupportedArpProtocolError
+		return nil, ErrUnsupportedArpProtocol
 	}
 
 	if packet.isArpResponse() {
@@ -46,7 +46,7 @@ func (llh *arpv4LinkLayerHandler) Handle(f ethernet.Frame) (LinkLayerResultPdu, 
 	if packet.isArpRequestForConfig(llh.ifconfig) {
 		return packet.buildArpResponseWithConfig(llh.ifconfig), nil
 	}
-	return nil, DropPduError
+	return nil, ErrDropPdu
 }
 
 type linkLayerWrappedResultPdu struct {

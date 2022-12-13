@@ -7,6 +7,7 @@ import (
 	"github.com/mdlayher/raw"
 	"log"
 	"net"
+	"strings"
 	"sync"
 	"time"
 )
@@ -37,6 +38,9 @@ func NewListener(ifconfig *InterfaceConfig) *LinkLayerListener {
 			ipv4Handler: &ipv4LinkLayerHandler{
 				ifconfig:  ifconfig,
 				arp4Table: arpTable,
+				nextHandler: &NetworkLayerHandler{
+					ifconfig: ifconfig,
+				},
 			},
 		},
 		arp4Table: arpTable,
@@ -52,6 +56,17 @@ func (d *LinkLayerListener) ListenAndServe(ctx context.Context) {
 	ifi, err := net.InterfaceByName(d.ifconfig.InterfaceName)
 	if err != nil {
 		log.Fatalf("failed to open interface: %v", err)
+	}
+
+	// map real hardware and IP addresses
+	d.ifconfig.SetRealHardwareAddr(ifi.HardwareAddr)
+	ifAddresses, err := ifi.Addrs()
+	for _, ipAddr := range ifAddresses {
+		if strings.Contains(ipAddr.String(), ".") {
+			// is IPv4
+			d.ifconfig.SetRealIP(ipAddr)
+			break
+		}
 	}
 
 	frameChan := make(chan ethernet.Frame)
@@ -90,7 +105,7 @@ func (d *LinkLayerListener) ListenAndServe(ctx context.Context) {
 			}
 
 			response, err := handler.Handle(f)
-			if err == DropPduError {
+			if err == ErrDropPdu {
 				continue
 			}
 
@@ -104,6 +119,9 @@ func (d *LinkLayerListener) ListenAndServe(ctx context.Context) {
 				continue
 			}
 
+			// TODO select correct interface based on on SenderHardwareAddr
+			//  this is required for routing, where a packet enters the router at a different
+			//  interface than where it's leaving
 			etherResponse := &ethernet.Frame{
 				Destination: response.TargetHardwareAddr(),
 				Source:      response.SenderHardwareAddr(),
@@ -148,7 +166,7 @@ func (a *arpWriter) SendArpRequest(ipAddr []byte) {
 		protoLen:           ipAddrSize,
 		operation:          arpOperationRequest,
 		senderHardwareAddr: a.ifconfig.HardwareAddr,
-		senderProtoAddr:    a.ifconfig.IPAddr,
+		senderProtoAddr:    a.ifconfig.Addr.IP,
 		targetHardwareAddr: emptyHardwareAddr,
 		targetProtoAddr:    ipAddr,
 	}
@@ -187,9 +205,9 @@ func (a *arp4Table) Store(ipAddr, macAddr []byte) {
 	a.ipv4ToMacMap[ipv4NumFormat] = macAddr
 }
 
-func (a *arp4Table) Resolve(ipAddr []byte) ([]byte, error) {
+func (a *arp4Table) Resolve(ipAddr net.IP) ([]byte, error) {
 	if len(ipAddr) != ipAddrSize {
-		return nil, IPAddrSizeError
+		return nil, ErrNotAnIPv4Address
 	}
 
 	a.mu.Lock()

@@ -1,6 +1,7 @@
 package ifconfigv4
 
 import (
+	"bytes"
 	"encoding/binary"
 )
 
@@ -12,6 +13,7 @@ type NetworkLayerResultPdu interface {
 
 type NetworkLayerHandler struct {
 	// TODO routing table
+	ifconfig *InterfaceConfig
 }
 
 type icmpResult struct {
@@ -35,13 +37,27 @@ func (i icmpResult) MarshalBinary() ([]byte, error) {
 
 	b[2] = 0
 	b[3] = 0
-	i.checksum = calcChecksum(b)
+	i.checksum = onesComplementChecksum(b)
 	binary.BigEndian.PutUint16(b[2:4], i.checksum)
 
 	return b, nil
 }
 
 func (nll *NetworkLayerHandler) Handle(packet *Ipv4Pdu) (NetworkLayerResultPdu, error) {
+	if bytes.Equal(packet.destinationIp, nll.ifconfig.RealIPAddr.IP) {
+		// this packet is for the real interface, not for the simulated one
+		return nil, ErrDropPdu
+	}
+
+	if bytes.Equal(packet.destinationIp, nll.ifconfig.Addr.IP) {
+		return nll.handleLocal(packet)
+	}
+
+	return nll.route(packet)
+}
+
+func (nll *NetworkLayerHandler) handleLocal(packet *Ipv4Pdu) (NetworkLayerResultPdu, error) {
+	// TODO implement clean structure for different protocols
 	switch packet.innerProto {
 	case 1:
 		// innerProto 1 = ICMP
@@ -68,5 +84,11 @@ func (nll *NetworkLayerHandler) Handle(packet *Ipv4Pdu) (NetworkLayerResultPdu, 
 		}
 	}
 
-	return nil, DropPduError
+	return nil, ErrDropPdu
+}
+
+func (nll *NetworkLayerHandler) route(packet *Ipv4Pdu) (NetworkLayerResultPdu, error) {
+	// TODO implement routing of IP packets
+	//  check if current application design is appropriate also for routing
+	return nil, ErrDropPdu
 }
