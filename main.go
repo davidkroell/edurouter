@@ -12,7 +12,7 @@ import (
 )
 
 func main() {
-	interfaceConfig, err := ifconfigv4.NewInterfaceConfig("wlp0s20f3", []byte{0x0, 0x93, 0x37, 0x79, 0x06, 0x85}, []byte{10, 0, 0, 80}, 24)
+	interfaceConfig, err := ifconfigv4.NewInterfaceConfig("wlp0s20f3", []byte{0x0, 0x93, 0x37, 0x79, 0x06, 0x85}, []byte{192, 168, 0, 80}, 24)
 	if err != nil {
 		log.Println(err)
 		return

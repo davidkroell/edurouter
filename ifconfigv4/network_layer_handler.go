@@ -15,19 +15,29 @@ type NetworkLayerHandler struct {
 }
 
 type icmpResult struct {
-	icmpType     uint8
-	code         uint8
-	checksum     uint16
-	restOfHeader [4]byte
+	icmpType uint8
+	icmpCode uint8
+	checksum uint16
+	id       uint16
+	seq      uint16
+	body     []byte
 }
 
 func (i icmpResult) MarshalBinary() ([]byte, error) {
-	b := make([]byte, 8)
+	b := make([]byte, 8+len(i.body))
 
 	b[0] = i.icmpType
-	b[1] = i.code
+	b[1] = i.icmpCode
+	binary.BigEndian.PutUint16(b[4:], i.id)
+	binary.BigEndian.PutUint16(b[6:], i.seq)
+
+	copy(b[8:], i.body)
+
+	b[2] = 0
+	b[3] = 0
+	i.checksum = calcChecksum(b)
 	binary.BigEndian.PutUint16(b[2:4], i.checksum)
-	copy(b[4:8], i.restOfHeader[:4])
+
 	return b, nil
 }
 
@@ -39,10 +49,12 @@ func (nll *NetworkLayerHandler) Handle(packet *Ipv4Pdu) (NetworkLayerResultPdu, 
 
 		if icmpType == 8 {
 			icmpBinary, _ := icmpResult{
-				icmpType:     0, // echo reply
-				code:         0,
-				checksum:     0,
-				restOfHeader: [4]byte{},
+				icmpType: 0, // echo reply
+				icmpCode: 0,
+				checksum: 0,
+				id:       binary.BigEndian.Uint16(packet.payload[4:6]),
+				seq:      binary.BigEndian.Uint16(packet.payload[6:8]),
+				body:     packet.payload[8:],
 			}.MarshalBinary()
 
 			return &Ipv4Pdu{

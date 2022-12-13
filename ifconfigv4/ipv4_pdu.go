@@ -52,7 +52,11 @@ func (a *Ipv4Pdu) MarshalBinary() ([]byte, error) {
 	copy(b[12:16], a.sourceIp)
 	copy(b[16:20], a.destinationIp)
 
+	// Clear checksum bytes
+	b[10] = 0
+	b[11] = 0
 	checksum := calcChecksum(b[:20])
+	// write checksum back
 	binary.BigEndian.PutUint16(b[10:12], checksum)
 
 	copy(b[20:], a.payload)
@@ -62,9 +66,6 @@ func (a *Ipv4Pdu) MarshalBinary() ([]byte, error) {
 
 // from: https://github.com/google/gopacket/blob/master/layers/ip4.go#L158
 func calcChecksum(bytes []byte) uint16 {
-	// Clear checksum bytes
-	bytes[10] = 0
-	bytes[11] = 0
 
 	// Compute checksum
 	var csum uint32
