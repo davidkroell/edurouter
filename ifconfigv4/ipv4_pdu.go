@@ -3,54 +3,78 @@ package ifconfigv4
 import (
 	"encoding/binary"
 	"io"
+	"net"
 )
 
-const ipv4MarshallingVersion = 4
+const (
+	defaultIPv4Version = 4
+	ipv4IHL            = 5
+	defaultIPv4TTL     = 64
+	IPv4HeaderLength   = 20
+)
 
-type Ipv4Pdu struct {
-	version        uint8
-	dscp           byte
-	ecn            byte
-	totalLength    uint16
-	identification uint16
-	flags          byte
-	fragmentOffset uint16
-	ttl            uint8
-	innerProto     uint8
-	headerChecksum uint16
-	sourceIp       []byte
-	destinationIp  []byte
-	payload        []byte
+type IPProtocol uint8
+
+const (
+	IPProtocolICMPv4 IPProtocol = 1
+	IPProtocolIPv4   IPProtocol = 4
+	IPProtocolTCP    IPProtocol = 6
+	IPProtocolUDP    IPProtocol = 17
+)
+
+type IPv4Pdu struct {
+	Version        uint8
+	TOS            uint8
+	TotalLength    uint16
+	Id             uint16
+	Flags          byte
+	FragOffset     uint16
+	TTL            uint8
+	Protocol       IPProtocol
+	HeaderChecksum uint16
+	SrcIP          net.IP
+	DstIP          net.IP
+	Payload        []byte
 }
 
-func (i Ipv4Pdu) TargetIPAddr() []byte {
-	return i.destinationIp
+func NewIPv4Pdu(srcIp, dstIp net.IP, ipProto IPProtocol, payload []byte) *IPv4Pdu {
+	return &IPv4Pdu{
+		Version:     defaultIPv4Version,
+		TotalLength: IPv4HeaderLength + uint16(len(payload)),
+		TTL:         defaultIPv4TTL,
+		Protocol:    ipProto,
+		SrcIP:       srcIp,
+		DstIP:       dstIp,
+		Payload:     payload,
+	}
 }
 
-func (i Ipv4Pdu) SenderIPAddr() []byte {
-	return i.sourceIp
+func (ip *IPv4Pdu) DstIPAddr() net.IP {
+	return ip.DstIP
 }
 
-func (a *Ipv4Pdu) MarshalBinary() ([]byte, error) {
-	length := 20 + uint16(len(a.payload))
+func (ip *IPv4Pdu) SrcIPAddr() net.IP {
+	return ip.SrcIP
+}
 
-	b := make([]byte, length) // TODO set correct length
+func (ip *IPv4Pdu) MarshalBinary() ([]byte, error) {
+	length := IPv4HeaderLength + uint16(len(ip.Payload))
 
-	// TODO extract 5=IHL flag
-	b[0] = (ipv4MarshallingVersion << 4) | (5 & 0b0000_1111)
-	b[1] = (a.dscp & 0b1111_1100) | (a.ecn & 0b0000_0011)
+	b := make([]byte, length)
+
+	b[0] = (ip.Version << 4) | ipv4IHL
+	b[1] = ip.TOS
 
 	binary.BigEndian.PutUint16(b[2:4], length)
-	binary.BigEndian.PutUint16(b[4:6], a.identification)
+	binary.BigEndian.PutUint16(b[4:6], ip.Id)
 
-	b[6] = (a.flags & 0b1110_0000)
+	b[6] = ip.Flags & 0b1110_0000
 
-	// TODO fragment offset
-	b[8] = 64           // ttl
-	b[9] = a.innerProto // todo set (icmp =1)
+	b[8] = ip.TTL
+	b[9] = uint8(ip.Protocol)
 
-	copy(b[12:16], a.sourceIp)
-	copy(b[16:20], a.destinationIp)
+	copy(b[12:16], ip.SrcIP)
+	copy(b[16:20], ip.DstIP)
 
 	// Clear checksum bytes
 	b[10] = 0
@@ -59,48 +83,45 @@ func (a *Ipv4Pdu) MarshalBinary() ([]byte, error) {
 	// write checksum back
 	binary.BigEndian.PutUint16(b[10:12], checksum)
 
-	copy(b[20:], a.payload)
+	copy(b[20:], ip.Payload)
 
 	return b, nil
 }
 
-func (a *Ipv4Pdu) UnmarshalBinary(payload []byte) error {
-	if len(payload) < 20 {
+func (ip *IPv4Pdu) UnmarshalBinary(payload []byte) error {
+	if len(payload) < IPv4HeaderLength {
 		return io.ErrUnexpectedEOF
 	}
 
-	// version and IHL share first byte
+	// Version and IHL share first byte
 	// select first 4 bits and shift right 4 times is the result
-	a.version = (payload[0] & 0b1111_0000) >> 4
+	ip.Version = (payload[0] & 0b1111_0000) >> 4
 
 	// take only last 4 bits
 	// ihl is parsed, but not used
 	ihl := payload[0] & 0b0000_1111
 
-	// dscp and ecn share second byte
-	// only first 6 bytes
-	a.dscp = payload[1] & 0b1111_1100
-	a.ecn = payload[1] & 0b0000_0011
+	ip.TOS = payload[1]
 
-	a.totalLength = binary.BigEndian.Uint16(payload[2:4])
+	ip.TotalLength = binary.BigEndian.Uint16(payload[2:4])
 
-	a.identification = binary.BigEndian.Uint16(payload[4:6])
+	ip.Id = binary.BigEndian.Uint16(payload[4:6])
 
 	// only first three bits
-	a.flags = payload[6] & 0b1110_0000
+	ip.Flags = payload[6] & 0b1110_0000
 	// 5 bits from 6-th byte, full byte from 7th byte
-	a.fragmentOffset = (uint16((payload[6]&0b0001_1111)>>3) << 8) + uint16(payload[7])
+	ip.FragOffset = (uint16((payload[6]&0b0001_1111)>>3) << 8) + uint16(payload[7])
 
-	a.ttl = payload[8]
+	ip.TTL = payload[8]
 
-	a.innerProto = payload[9]
-	a.headerChecksum = binary.BigEndian.Uint16(payload[10:12])
-	a.sourceIp = payload[12:16]
-	a.destinationIp = payload[16:20]
+	ip.Protocol = IPProtocol(payload[9])
+	ip.HeaderChecksum = binary.BigEndian.Uint16(payload[10:12])
+	ip.SrcIP = payload[12:16]
+	ip.DstIP = payload[16:20]
 
-	// the default starting byte of the payload without options.
+	// the default starting byte of the Payload without options.
 	// options are only rarely used
-	payloadStartByte := uint8(20)
+	payloadStartByte := uint8(IPv4HeaderLength)
 
 	if ihl > 5 {
 		// internetHeaderLength is the length of the header in 32-bits words
@@ -112,7 +133,7 @@ func (a *Ipv4Pdu) UnmarshalBinary(payload []byte) error {
 		payloadStartByte = ihl * 4
 	}
 
-	// rest of the packet is the payload
-	a.payload = payload[payloadStartByte:]
+	// rest of the packet is the Payload
+	ip.Payload = payload[payloadStartByte:]
 	return nil
 }

@@ -38,8 +38,11 @@ func NewListener(ifconfig *InterfaceConfig) *LinkLayerListener {
 			ipv4Handler: &ipv4LinkLayerHandler{
 				ifconfig:  ifconfig,
 				arp4Table: arpTable,
-				nextHandler: &NetworkLayerHandler{
+				nextHandler: &InternetLayerHandler{
 					ifconfig: ifconfig,
+					internetLayerStrategy: &internetLayerStrategy{
+						icmpHandler: &icmpHandler{},
+					},
 				},
 			},
 		},
@@ -104,7 +107,7 @@ func (d *LinkLayerListener) ListenAndServe(ctx context.Context) {
 				continue
 			}
 
-			response, err := handler.Handle(f)
+			ethernetResponse, err := handler.Handle(&f)
 			if err == ErrDropPdu {
 				continue
 			}
@@ -113,33 +116,18 @@ func (d *LinkLayerListener) ListenAndServe(ctx context.Context) {
 				continue
 			}
 
-			framePayload, err := response.MarshalBinary()
+			frameBinary, err := ethernetResponse.MarshalBinary()
 			if err != nil {
-				log.Printf("failed to marshal payload to binary: %v", err)
+				log.Printf("failed to marshal Payload to binary: %v", err)
 				continue
 			}
 
-			// TODO select correct interface based on on SenderHardwareAddr
+			// TODO select correct interface based on SenderHardwareAddr
 			//  this is required for routing, where a packet enters the router at a different
 			//  interface than where it's leaving
-			etherResponse := &ethernet.Frame{
-				Destination: response.TargetHardwareAddr(),
-				Source:      response.SenderHardwareAddr(),
-				EtherType:   f.EtherType,
-				Payload:     framePayload,
-			}
-
-			frameBinary, err := etherResponse.MarshalBinary()
-			if err != nil {
-				log.Printf("failed to marshal frame to binary: %v", err)
-				continue
-			}
-
-			addr := &raw.Addr{
-				HardwareAddr: response.TargetHardwareAddr(),
-			}
-
-			_, err = connections[f.EtherType].WriteTo(frameBinary, addr)
+			_, err = connections[f.EtherType].WriteTo(frameBinary, &raw.Addr{
+				HardwareAddr: ethernetResponse.Destination,
+			})
 
 			if err != nil {
 				log.Printf("failed to write ethernet frame: %v\n", err)
@@ -176,7 +164,7 @@ func (a *arpWriter) SendArpRequest(ipAddr []byte) {
 		panic(err) // TODO proper error handling
 	}
 
-	_, err = a.c.WriteTo(bin, &raw.Addr{ethernet.Broadcast})
+	_, err = a.c.WriteTo(bin, &raw.Addr{HardwareAddr: ethernet.Broadcast})
 	if err != nil {
 		panic(err) // TODO proper error handling
 	}

@@ -2,6 +2,7 @@ package ifconfigv4
 
 import (
 	"github.com/mdlayher/ethernet"
+	"log"
 )
 
 type LinkLayerResultPdu interface {
@@ -11,7 +12,7 @@ type LinkLayerResultPdu interface {
 }
 
 type LinkLayerHandler interface {
-	Handle(ethernet.Frame) (LinkLayerResultPdu, error)
+	Handle(*ethernet.Frame) (*ethernet.Frame, error)
 }
 
 type arpv4LinkLayerHandler struct {
@@ -22,10 +23,10 @@ type arpv4LinkLayerHandler struct {
 type ipv4LinkLayerHandler struct {
 	ifconfig    *InterfaceConfig
 	arp4Table   *arp4Table
-	nextHandler *NetworkLayerHandler
+	nextHandler *InternetLayerHandler
 }
 
-func (llh *arpv4LinkLayerHandler) Handle(f ethernet.Frame) (LinkLayerResultPdu, error) {
+func (llh *arpv4LinkLayerHandler) Handle(f *ethernet.Frame) (*ethernet.Frame, error) {
 	var packet arpv4Pdu
 
 	// ARP logic
@@ -44,49 +45,49 @@ func (llh *arpv4LinkLayerHandler) Handle(f ethernet.Frame) (LinkLayerResultPdu, 
 	}
 
 	if packet.isArpRequestForConfig(llh.ifconfig) {
-		return packet.buildArpResponseWithConfig(llh.ifconfig), nil
+		arpResponse := packet.buildArpResponseWithConfig(llh.ifconfig)
+
+		arpBinary, err := arpResponse.MarshalBinary()
+		if err != nil {
+			return nil, ErrDropPdu
+		}
+
+		return &ethernet.Frame{
+			Destination: f.Source,
+			Source:      llh.ifconfig.HardwareAddr,
+			EtherType:   ethernet.EtherTypeARP,
+			Payload:     arpBinary,
+		}, nil
 	}
 	return nil, ErrDropPdu
 }
 
-type linkLayerWrappedResultPdu struct {
-	senderHardwareAddr []byte
-	targetHardwareAddr []byte
-	ipv4Packet         NetworkLayerResultPdu
-}
-
-func (n linkLayerWrappedResultPdu) SenderHardwareAddr() []byte {
-	return n.senderHardwareAddr
-}
-
-func (n linkLayerWrappedResultPdu) TargetHardwareAddr() []byte {
-	return n.targetHardwareAddr
-}
-
-func (n linkLayerWrappedResultPdu) MarshalBinary() ([]byte, error) {
-	return n.ipv4Packet.MarshalBinary()
-}
-
-func (llh *ipv4LinkLayerHandler) Handle(f ethernet.Frame) (LinkLayerResultPdu, error) {
-	var ipv4Packet Ipv4Pdu
+func (llh *ipv4LinkLayerHandler) Handle(f *ethernet.Frame) (*ethernet.Frame, error) {
+	var ipv4Packet IPv4Pdu
 
 	err := (&ipv4Packet).UnmarshalBinary(f.Payload)
 	if err != nil {
 		return nil, err
 	}
 
-	llh.arp4Table.Store(ipv4Packet.sourceIp, f.Source)
+	llh.arp4Table.Store(ipv4Packet.SrcIP, f.Source)
 
 	result, err := llh.nextHandler.Handle(&ipv4Packet)
 	if err != nil {
 		return nil, err
 	}
 
-	targetHardwareAddr, err := llh.arp4Table.Resolve(result.TargetIPAddr())
+	framePayload, err := result.MarshalBinary()
+	if err != nil {
+		log.Printf("failed to marshal frame to binary: %v", err)
+	}
 
-	return linkLayerWrappedResultPdu{
-		llh.ifconfig.HardwareAddr,
-		targetHardwareAddr,
-		result,
+	targetHardwareAddr, err := llh.arp4Table.Resolve(result.DstIPAddr())
+
+	return &ethernet.Frame{
+		Destination: targetHardwareAddr,
+		Source:      llh.ifconfig.HardwareAddr,
+		EtherType:   f.EtherType,
+		Payload:     framePayload,
 	}, nil
 }
