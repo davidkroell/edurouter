@@ -149,7 +149,7 @@ func (a *arpWriter) SendArpRequest(ipAddr []byte) {
 
 	req := arpv4Pdu{
 		hardwareType:       1,
-		protoType:          ethernet.EtherTypeARP,
+		protoType:          ethernet.EtherTypeIPv4,
 		hardwareLen:        hardwareAddrSize,
 		protoLen:           ipAddrSize,
 		operation:          arpOperationRequest,
@@ -164,7 +164,20 @@ func (a *arpWriter) SendArpRequest(ipAddr []byte) {
 		panic(err) // TODO proper error handling
 	}
 
-	_, err = a.c.WriteTo(bin, &raw.Addr{HardwareAddr: ethernet.Broadcast})
+	frame := ethernet.Frame{
+		Destination: ethernet.Broadcast,
+		Source:      req.senderHardwareAddr,
+		EtherType:   ethernet.EtherTypeARP,
+		Payload:     bin,
+	}
+
+	frameBinary, err := frame.MarshalBinary()
+
+	if err != nil {
+		panic(err) // TODO proper error handling
+	}
+
+	_, err = a.c.WriteTo(frameBinary, &raw.Addr{HardwareAddr: ethernet.Broadcast})
 	if err != nil {
 		panic(err) // TODO proper error handling
 	}
@@ -207,21 +220,24 @@ func (a *arp4Table) Resolve(ipAddr net.IP) ([]byte, error) {
 	}
 	a.mu.Unlock()
 
-	// Send ARP
-	a.arpWriter.SendArpRequest(ipAddr)
+	for i := 0; i <= 100; i++ {
 
-	// Wait for result
-	t := time.NewTimer(time.Millisecond * 10)
-	defer t.Stop()
-	for {
-		<-t.C
+		// every 10 milliseconds
+		if i%10 == 0 {
+			// Send ARP
+			a.arpWriter.SendArpRequest(ipAddr)
+		}
+
 		a.mu.Lock()
 		if k, ok := a.ipv4ToMacMap[ipv4NumFormat]; ok {
 			a.mu.Unlock()
 			return k, nil
 		}
 		a.mu.Unlock()
+
+		time.Sleep(time.Millisecond * 10)
 	}
+	return nil, ErrArpTimeout
 }
 
 func readFramesFromConn(ctx context.Context, mtu int, conn net.PacketConn, outChan chan<- ethernet.Frame) {
