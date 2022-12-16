@@ -20,7 +20,6 @@ type InternetLayerResultPdu interface {
 
 type InternetLayerHandler struct {
 	// TODO routing table
-	ifconfig              *InterfaceConfig
 	internetLayerStrategy *internetLayerStrategy
 }
 
@@ -89,13 +88,13 @@ func (icmp *ICMPPacket) MakeResponse() {
 	icmp.IcmpType = IcmpTypeEchoReply
 }
 
-func (nll *InternetLayerHandler) Handle(packet *IPv4Pdu) (InternetLayerResultPdu, error) {
-	if bytes.Equal(packet.DstIP, nll.ifconfig.RealIPAddr.IP) {
+func (nll *InternetLayerHandler) Handle(packet *IPv4Pdu, ifconfig *InterfaceConfig) (InternetLayerResultPdu, error) {
+	if bytes.Equal(packet.DstIP, ifconfig.RealIPAddr.IP) {
 		// this packet is for the real interface, not for the simulated one
 		return nil, ErrDropPdu
 	}
 
-	if bytes.Equal(packet.DstIP, nll.ifconfig.Addr.IP) {
+	if bytes.Equal(packet.DstIP, ifconfig.Addr.IP) {
 		// this packet has to be handled at the simulated IP address
 		return nll.handleLocal(packet)
 	}

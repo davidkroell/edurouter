@@ -1,100 +1,52 @@
 package ifconfigv4
 
 import (
+	"bytes"
 	"context"
 	"encoding/binary"
+	"errors"
 	"github.com/mdlayher/ethernet"
 	"github.com/mdlayher/raw"
 	"log"
 	"net"
-	"strings"
 	"sync"
 	"time"
 )
 
 type LinkLayerListener struct {
-	ifconfig  *InterfaceConfig
-	strategy  linkLayerStrategy
-	arp4Table *arp4Table
+	interfaces []*InterfaceConfig
+	strategy   linkLayerStrategy
 }
 
-func NewListener(ifconfig *InterfaceConfig) *LinkLayerListener {
-	arpTable := &arp4Table{
-		ifconfig:     ifconfig,
-		ipv4ToMacMap: map[uint32][]byte{},
-		arpWriter: arpWriter{
-			ifconfig: ifconfig,
-		},
-		mu: sync.Mutex{},
-	}
-
+func NewListener(interfaces ...*InterfaceConfig) *LinkLayerListener {
 	return &LinkLayerListener{
-		ifconfig: ifconfig,
+		interfaces: interfaces,
 		strategy: linkLayerStrategy{
-			arpHandler: &arpv4LinkLayerHandler{
-				ifconfig:  ifconfig,
-				arp4Table: arpTable,
-			},
+			arpHandler: &arpv4LinkLayerHandler{},
 			ipv4Handler: &ipv4LinkLayerHandler{
-				ifconfig:  ifconfig,
-				arp4Table: arpTable,
 				nextHandler: &InternetLayerHandler{
-					ifconfig: ifconfig,
 					internetLayerStrategy: &internetLayerStrategy{
 						icmpHandler: &icmpHandler{},
 					},
 				},
 			},
 		},
-		arp4Table: arpTable,
 	}
 }
 
-func (d *LinkLayerListener) setArpResolverConn(conn net.PacketConn) {
-	d.arp4Table.arpWriter.c = conn
+type frameFromInterface struct {
+	frame       *ethernet.Frame
+	inInterface *InterfaceConfig
 }
 
-func (d *LinkLayerListener) ListenAndServe(ctx context.Context) {
-	// Select the interface to use for Ethernet traffic
-	ifi, err := net.InterfaceByName(d.ifconfig.InterfaceName)
-	if err != nil {
-		log.Fatalf("failed to open interface: %v", err)
+func (listener *LinkLayerListener) ListenAndServe(ctx context.Context) {
+
+	frameChan := make(chan frameFromInterface)
+	supportedEtherTypes := listener.strategy.GetSupportedEtherTypes()
+
+	for _, iface := range listener.interfaces {
+		iface.SetupAndListen(ctx, supportedEtherTypes, frameChan)
 	}
-
-	// map real hardware and IP addresses
-	d.ifconfig.SetRealHardwareAddr(ifi.HardwareAddr)
-	ifAddresses, err := ifi.Addrs()
-	for _, ipAddr := range ifAddresses {
-		if strings.Contains(ipAddr.String(), ".") {
-			// is IPv4
-			d.ifconfig.SetRealIP(ipAddr)
-			break
-		}
-	}
-
-	frameChan := make(chan ethernet.Frame)
-	connections := map[ethernet.EtherType]net.PacketConn{}
-
-	supportedEtherTypes := d.strategy.GetSupportedEtherTypes()
-	for _, etherType := range supportedEtherTypes {
-		conn, err := raw.ListenPacket(ifi, uint16(etherType), nil)
-		if err != nil {
-			log.Fatalf("failed to listen: %v", err)
-		}
-
-		if etherType == ethernet.EtherTypeARP {
-			d.setArpResolverConn(conn)
-		}
-
-		connections[etherType] = conn
-		go readFramesFromConn(ctx, ifi.MTU, conn, frameChan)
-	}
-
-	defer func() {
-		for _, v := range connections {
-			v.Close()
-		}
-	}()
 
 	// read frames from supplier channel
 	for {
@@ -102,32 +54,22 @@ func (d *LinkLayerListener) ListenAndServe(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case f := <-frameChan:
-			handler, err := d.strategy.GetHandler(f.EtherType)
+			handler, err := listener.strategy.GetHandler(f.frame.EtherType)
 			if err != nil {
 				continue
 			}
 
-			ethernetResponse, err := handler.Handle(&f)
-			if err == ErrDropPdu {
+			frameResponse, err := handler.Handle(f.frame, f.inInterface)
+			if err == ErrDropPdu || err != nil {
 				continue
 			}
 
-			if err != nil {
-				continue
+			for _, iface := range listener.interfaces {
+				if bytes.Equal(iface.HardwareAddr, frameResponse.Source) {
+					err = iface.WriteFrame(frameResponse)
+					break
+				}
 			}
-
-			frameBinary, err := ethernetResponse.MarshalBinary()
-			if err != nil {
-				log.Printf("failed to marshal Payload to binary: %v", err)
-				continue
-			}
-
-			// TODO select correct interface based on SenderHardwareAddr
-			//  this is required for routing, where a packet enters the router at a different
-			//  interface than where it's leaving
-			_, err = connections[f.EtherType].WriteTo(frameBinary, &raw.Addr{
-				HardwareAddr: ethernetResponse.Destination,
-			})
 
 			if err != nil {
 				log.Printf("failed to write ethernet frame: %v\n", err)
@@ -142,9 +84,9 @@ type arpWriter struct {
 	c        net.PacketConn
 }
 
-func (a *arpWriter) SendArpRequest(ipAddr []byte) {
+func (a *arpWriter) SendArpRequest(ipAddr []byte) error {
 	if a.c == nil {
-		return
+		return errors.New("outbound ARP-connection was nil")
 	}
 
 	req := arpv4Pdu{
@@ -161,7 +103,7 @@ func (a *arpWriter) SendArpRequest(ipAddr []byte) {
 
 	bin, err := req.MarshalBinary()
 	if err != nil {
-		panic(err) // TODO proper error handling
+		return err
 	}
 
 	frame := ethernet.Frame{
@@ -174,13 +116,11 @@ func (a *arpWriter) SendArpRequest(ipAddr []byte) {
 	frameBinary, err := frame.MarshalBinary()
 
 	if err != nil {
-		panic(err) // TODO proper error handling
+		return err
 	}
 
 	_, err = a.c.WriteTo(frameBinary, &raw.Addr{HardwareAddr: ethernet.Broadcast})
-	if err != nil {
-		panic(err) // TODO proper error handling
-	}
+	return err
 }
 
 type arp4Table struct {
@@ -225,7 +165,10 @@ func (a *arp4Table) Resolve(ipAddr net.IP) ([]byte, error) {
 		// every 10 milliseconds
 		if i%10 == 0 {
 			// Send ARP
-			a.arpWriter.SendArpRequest(ipAddr)
+			err := a.arpWriter.SendArpRequest(ipAddr)
+			if err != nil {
+				return nil, err
+			}
 		}
 
 		a.mu.Lock()
@@ -238,29 +181,4 @@ func (a *arp4Table) Resolve(ipAddr net.IP) ([]byte, error) {
 		time.Sleep(time.Millisecond * 10)
 	}
 	return nil, ErrArpTimeout
-}
-
-func readFramesFromConn(ctx context.Context, mtu int, conn net.PacketConn, outChan chan<- ethernet.Frame) {
-	// TODO implement context close
-
-	// Accept frames up to interface's MTU in size
-	b := make([]byte, mtu)
-	var f ethernet.Frame
-
-	// Keep reading frames
-	for {
-		n, _, err := conn.ReadFrom(b)
-		if err != nil {
-			log.Printf("failed to receive message: %v\n", err)
-			continue
-		}
-
-		// Unpack Ethernet frame into Go representation.
-		if err := (&f).UnmarshalBinary(b[:n]); err != nil {
-			log.Printf("failed to unmarshal ethernet frame: %v\n", err)
-			continue
-		}
-
-		outChan <- f
-	}
 }
