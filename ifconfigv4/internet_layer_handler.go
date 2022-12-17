@@ -14,12 +14,6 @@ const (
 	icmpv4HeaderLength = 8
 )
 
-type InternetLayerResultPdu interface {
-	MarshalBinary() ([]byte, error)
-	SrcIPAddr() net.IP
-	DstIPAddr() net.IP
-}
-
 type InternetLayerHandler struct {
 	internetLayerStrategy *internetLayerStrategy
 	routeTable            *routeTable
@@ -90,7 +84,7 @@ func (icmp *ICMPPacket) MakeResponse() {
 	icmp.IcmpType = IcmpTypeEchoReply
 }
 
-func (nll *InternetLayerHandler) Handle(packet *IPv4Pdu, ifconfig *InterfaceConfig) (InternetLayerResultPdu, *InterfaceConfig, error) {
+func (nll *InternetLayerHandler) Handle(packet *IPv4Pdu, ifconfig *InterfaceConfig) (*IPv4Pdu, *InterfaceConfig, error) {
 	if bytes.Equal(packet.DstIP, ifconfig.RealIPAddr.IP) {
 		// this packet is for the real interface, not for the simulated one
 		return nil, nil, ErrDropPdu
@@ -105,7 +99,7 @@ func (nll *InternetLayerHandler) Handle(packet *IPv4Pdu, ifconfig *InterfaceConf
 	return nll.routeTable.routePacket(packet)
 }
 
-func (nll *InternetLayerHandler) handleLocal(packet *IPv4Pdu) (InternetLayerResultPdu, error) {
+func (nll *InternetLayerHandler) handleLocal(packet *IPv4Pdu) (*IPv4Pdu, error) {
 	nextHandler, err := nll.internetLayerStrategy.GetHandler(packet.Protocol)
 	if err != nil {
 		return nil, ErrDropPdu

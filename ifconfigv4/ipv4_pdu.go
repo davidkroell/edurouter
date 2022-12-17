@@ -49,14 +49,6 @@ func NewIPv4Pdu(srcIp, dstIp net.IP, ipProto IPProtocol, payload []byte) *IPv4Pd
 	}
 }
 
-func (ip *IPv4Pdu) DstIPAddr() net.IP {
-	return ip.DstIP
-}
-
-func (ip *IPv4Pdu) SrcIPAddr() net.IP {
-	return ip.SrcIP
-}
-
 func (ip *IPv4Pdu) MarshalBinary() ([]byte, error) {
 	length := IPv4HeaderLength + uint16(len(ip.Payload))
 
