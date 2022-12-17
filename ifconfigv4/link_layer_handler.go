@@ -67,7 +67,7 @@ func (llh *ipv4LinkLayerHandler) Handle(f *ethernet.Frame, ifconfig *InterfaceCo
 
 	ifconfig.arpTable.Store(ipv4Packet.SrcIP, f.Source)
 
-	result, err := llh.nextHandler.Handle(&ipv4Packet, ifconfig)
+	result, outIfconfig, err := llh.nextHandler.Handle(&ipv4Packet, ifconfig)
 	if err != nil {
 		return nil, err
 	}
@@ -77,11 +77,11 @@ func (llh *ipv4LinkLayerHandler) Handle(f *ethernet.Frame, ifconfig *InterfaceCo
 		log.Printf("failed to marshal frame to binary: %v", err)
 	}
 
-	targetHardwareAddr, err := ifconfig.arpTable.Resolve(result.DstIPAddr())
+	targetHardwareAddr, err := outIfconfig.arpTable.Resolve(result.DstIPAddr())
 
 	return &ethernet.Frame{
 		Destination: targetHardwareAddr,
-		Source:      ifconfig.HardwareAddr,
+		Source:      outIfconfig.HardwareAddr,
 		EtherType:   f.EtherType,
 		Payload:     framePayload,
 	}, nil

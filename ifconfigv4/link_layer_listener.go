@@ -19,6 +19,22 @@ type LinkLayerListener struct {
 }
 
 func NewListener(interfaces ...*InterfaceConfig) *LinkLayerListener {
+	routeTable := &routeTable{
+		routeConfigs: nil,
+		mu:           sync.Mutex{},
+	}
+
+	for _, i := range interfaces {
+		routeTable.addRoute(routeConfig{
+			routeType: LinkLocalRouteType,
+			destination: net.IPNet{
+				IP:   i.Addr.IP.Mask(i.Addr.Mask),
+				Mask: i.Addr.Mask,
+			},
+			outInterface: i,
+		})
+	}
+
 	return &LinkLayerListener{
 		interfaces: interfaces,
 		strategy: linkLayerStrategy{
@@ -28,6 +44,7 @@ func NewListener(interfaces ...*InterfaceConfig) *LinkLayerListener {
 					internetLayerStrategy: &internetLayerStrategy{
 						icmpHandler: &icmpHandler{},
 					},
+					routeTable: routeTable,
 				},
 			},
 		},
@@ -59,14 +76,14 @@ func (listener *LinkLayerListener) ListenAndServe(ctx context.Context) {
 				continue
 			}
 
-			frameResponse, err := handler.Handle(f.frame, f.inInterface)
+			frameToSend, err := handler.Handle(f.frame, f.inInterface)
 			if err == ErrDropPdu || err != nil {
 				continue
 			}
 
 			for _, iface := range listener.interfaces {
-				if bytes.Equal(iface.HardwareAddr, frameResponse.Source) {
-					err = iface.WriteFrame(frameResponse)
+				if bytes.Equal(iface.HardwareAddr, frameToSend.Source) {
+					err = iface.WriteFrame(frameToSend)
 					break
 				}
 			}
