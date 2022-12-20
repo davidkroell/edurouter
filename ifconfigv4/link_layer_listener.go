@@ -19,19 +19,19 @@ type LinkLayerListener struct {
 }
 
 func NewListener(interfaces ...*InterfaceConfig) *LinkLayerListener {
-	routeTable := &routeTable{
-		routeConfigs: nil,
-		mu:           sync.Mutex{},
+	routeTable := &RouteTable{
+		configuredRoutes: nil,
+		mu:               sync.Mutex{},
 	}
 
 	for _, i := range interfaces {
-		routeTable.addRoute(routeConfig{
-			routeType: LinkLocalRouteType,
-			destination: net.IPNet{
+		routeTable.AddRoute(RouteInfo{
+			RouteType: LinkLocalRouteType,
+			DstNet: net.IPNet{
 				IP:   i.Addr.IP.Mask(i.Addr.Mask),
 				Mask: i.Addr.Mask,
 			},
-			outInterface: i,
+			OutInterface: i,
 		})
 	}
 

@@ -2,7 +2,6 @@ package ifconfigv4
 
 import (
 	"github.com/mdlayher/ethernet"
-	"log"
 )
 
 type LinkLayerResultPdu interface {
@@ -67,22 +66,31 @@ func (llh *ipv4LinkLayerHandler) Handle(f *ethernet.Frame, ifconfig *InterfaceCo
 
 	ifconfig.arpTable.Store(ipv4Packet.SrcIP, f.Source)
 
-	result, outIfconfig, err := llh.nextHandler.Handle(&ipv4Packet, ifconfig)
+	result, routeInfo, err := llh.nextHandler.Handle(&ipv4Packet, ifconfig)
 	if err != nil {
 		return nil, err
 	}
 
 	framePayload, err := result.MarshalBinary()
 	if err != nil {
-		log.Printf("failed to marshal frame to binary: %v", err)
+		return nil, err
 	}
 
-	targetHardwareAddr, err := outIfconfig.arpTable.Resolve(result.DstIP)
+	outFrame := &ethernet.Frame{
+		Source:    routeInfo.OutInterface.HardwareAddr,
+		EtherType: f.EtherType,
+		Payload:   framePayload,
+	}
 
-	return &ethernet.Frame{
-		Destination: targetHardwareAddr,
-		Source:      outIfconfig.HardwareAddr,
-		EtherType:   f.EtherType,
-		Payload:     framePayload,
-	}, nil
+	if routeInfo.RouteType == LinkLocalRouteType {
+		outFrame.Destination, err = routeInfo.OutInterface.arpTable.Resolve(result.DstIP)
+	} else {
+		outFrame.Destination, err = routeInfo.OutInterface.arpTable.Resolve(*routeInfo.NextHop)
+	}
+
+	if err != nil {
+		return nil, err
+	}
+
+	return outFrame, nil
 }
