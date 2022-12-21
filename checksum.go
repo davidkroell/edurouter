@@ -1,6 +1,7 @@
-package ifconfigv4
+package edurouter
 
 // from: https://github.com/google/gopacket/blob/master/layers/ip4.go#L158
+// slightly adapted
 func onesComplementChecksum(bytes []byte) uint16 {
 
 	// Compute checksum

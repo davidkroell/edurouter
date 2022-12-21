@@ -1,4 +1,4 @@
-package ifconfigv4
+package edurouter
 
 import (
 	"encoding/binary"

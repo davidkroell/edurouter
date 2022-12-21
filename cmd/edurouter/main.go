@@ -2,13 +2,13 @@ package main
 
 import (
 	"context"
-	"github.com/davidkroell/edurouter/ifconfigv4"
+	"github.com/davidkroell/edurouter"
 	"log"
 	"net"
 )
 
 func main() {
-	wifiInterface, err := ifconfigv4.NewInterfaceConfig("wlp0s20f3", &net.IPNet{
+	wifiInterface, err := edurouter.NewInterfaceConfig("wlp0s20f3", &net.IPNet{
 		IP:   []byte{192, 168, 0, 80},
 		Mask: net.CIDRMask(24, 32),
 	})
@@ -18,14 +18,14 @@ func main() {
 		return
 	}
 
-	dockerInterface, err := ifconfigv4.NewInterfaceConfig("docker0", &net.IPNet{
+	dockerInterface, err := edurouter.NewInterfaceConfig("docker0", &net.IPNet{
 		IP:   []byte{172, 17, 0, 50},
 		Mask: net.CIDRMask(16, 32),
 	})
 
 	ctx := context.Background()
 
-	listener := ifconfigv4.NewListener(wifiInterface, dockerInterface)
+	listener := edurouter.NewLinkLayerListener(wifiInterface, dockerInterface)
 
 	listener.ListenAndServe(ctx)
 }

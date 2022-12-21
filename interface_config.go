@@ -1,4 +1,4 @@
-package ifconfigv4
+package edurouter
 
 import (
 	"context"
@@ -7,20 +7,18 @@ import (
 	"log"
 	"net"
 	"strings"
-	"sync"
 )
 
 const (
-	ipAddrSize       = 4
-	hardwareAddrSize = 6
+	HardwareAddrLen = 6
 )
 
 type InterfaceConfig struct {
 	InterfaceName      string
-	HardwareAddr       []byte
+	HardwareAddr       *net.HardwareAddr
 	Addr               *net.IPNet
 	RealIPAddr         *net.IPNet
-	arpTable           *arp4Table
+	arpTable           *ARPv4Table
 	managedConnections map[ethernet.EtherType]net.PacketConn
 }
 
@@ -37,14 +35,9 @@ func NewInterfaceConfig(name string, addr *net.IPNet) (*InterfaceConfig, error) 
 }
 
 func (i *InterfaceConfig) SetupAndListen(ctx context.Context, supportedEtherTypes []ethernet.EtherType, frameChan chan<- frameFromInterface) {
-	i.arpTable = &arp4Table{
-		ifconfig:     i,
-		ipv4ToMacMap: map[uint32][]byte{},
-		arpWriter: arpWriter{
-			ifconfig: i,
-		},
-		mu: sync.Mutex{},
-	}
+	arpWriter := NewARPv4Writer(i)
+
+	i.arpTable = NewARPv4Table(i, arpWriter)
 
 	// Select the interface to use for Ethernet traffic
 	ifi, err := net.InterfaceByName(i.InterfaceName)
@@ -53,7 +46,7 @@ func (i *InterfaceConfig) SetupAndListen(ctx context.Context, supportedEtherType
 	}
 
 	// map real hardware and IP addresses
-	i.HardwareAddr = ifi.HardwareAddr
+	i.HardwareAddr = &ifi.HardwareAddr
 	ifAddresses, err := ifi.Addrs()
 	for _, ipAddr := range ifAddresses {
 		if strings.Contains(ipAddr.String(), ".") {
@@ -74,7 +67,8 @@ func (i *InterfaceConfig) SetupAndListen(ctx context.Context, supportedEtherType
 		}
 
 		if etherType == ethernet.EtherTypeARP {
-			i.arpTable.arpWriter.c = conn
+			// inject ARP PacketConn into arpWriter
+			arpWriter.Initialize(conn)
 		}
 
 		i.managedConnections[etherType] = conn
@@ -93,12 +87,14 @@ func (i *InterfaceConfig) readFramesFromConn(ctx context.Context, mtu int, conn 
 	for {
 		n, _, err := conn.ReadFrom(b)
 		if err != nil {
+			// TODO fix printing
 			log.Printf("failed to receive message: %v\n", err)
 			continue
 		}
 
 		// Unpack Ethernet frame into Go representation.
 		if err := (&f).UnmarshalBinary(b[:n]); err != nil {
+			// todo fix printing
 			log.Printf("failed to unmarshal ethernet frame: %v\n", err)
 			continue
 		}

@@ -1,4 +1,4 @@
-package ifconfigv4
+package edurouter
 
 import (
 	"encoding/binary"
@@ -7,9 +7,9 @@ import (
 )
 
 const (
-	defaultIPv4Version = 4
-	ipv4IHL            = 5
-	defaultIPv4TTL     = 64
+	DefaultIPv4Version = 4
+	IPv4IHL            = 5
+	DefaultIPv4TTL     = 64
 	IPv4HeaderLength   = 20
 )
 
@@ -39,9 +39,9 @@ type IPv4Pdu struct {
 
 func NewIPv4Pdu(srcIp, dstIp net.IP, ipProto IPProtocol, payload []byte) *IPv4Pdu {
 	return &IPv4Pdu{
-		Version:     defaultIPv4Version,
+		Version:     DefaultIPv4Version,
 		TotalLength: IPv4HeaderLength + uint16(len(payload)),
-		TTL:         defaultIPv4TTL,
+		TTL:         DefaultIPv4TTL,
 		Protocol:    ipProto,
 		SrcIP:       srcIp,
 		DstIP:       dstIp,
@@ -54,7 +54,7 @@ func (ip *IPv4Pdu) MarshalBinary() ([]byte, error) {
 
 	b := make([]byte, length)
 
-	b[0] = (ip.Version << 4) | ipv4IHL
+	b[0] = (ip.Version << 4) | IPv4IHL
 	b[1] = ip.TOS
 
 	binary.BigEndian.PutUint16(b[2:4], length)

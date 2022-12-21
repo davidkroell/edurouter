@@ -1,12 +1,16 @@
-package ifconfigv4
+package edurouter
 
 import (
 	"bytes"
 )
 
 type InternetLayerHandler struct {
-	internetLayerStrategy *internetLayerStrategy
+	internetLayerStrategy *InternetLayerStrategy
 	routeTable            *RouteTable
+}
+
+func NewInternetLayerHandler(internetLayerStrategy *InternetLayerStrategy, routeTable *RouteTable) *InternetLayerHandler {
+	return &InternetLayerHandler{internetLayerStrategy: internetLayerStrategy, routeTable: routeTable}
 }
 
 func (nll *InternetLayerHandler) Handle(packet *IPv4Pdu, ifconfig *InterfaceConfig) (*IPv4Pdu, *RouteInfo, error) {
@@ -30,7 +34,7 @@ func (nll *InternetLayerHandler) Handle(packet *IPv4Pdu, ifconfig *InterfaceConf
 		return packet, ri, err
 	}
 
-	return nll.routeTable.routePacket(packet)
+	return nll.routeTable.RoutePacket(packet)
 }
 
 func (nll *InternetLayerHandler) handleLocal(packet *IPv4Pdu) (*IPv4Pdu, error) {

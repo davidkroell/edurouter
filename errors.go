@@ -1,4 +1,4 @@
-package ifconfigv4
+package edurouter
 
 import "errors"
 
@@ -10,5 +10,6 @@ var (
 
 	ErrNotAnIPv4Address       = errors.New("ip address it not an IPv4 address")
 	ErrNoInternetLayerHandler = errors.New("no internet layer handler for given IPProtocol found")
-	ErrArpTimeout             = errors.New("ARP timeout. no MAC found for this IP Address")
+	ErrARPTimeout             = errors.New("ARP timeout. no MAC found for this IP Address")
+	ErrARPPacketConn          = errors.New("outbound PacketConn was nil")
 )

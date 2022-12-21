@@ -1,12 +1,4 @@
-package ifconfigv4
-
-type internetLayerStrategy struct {
-	icmpHandler *icmpHandler
-}
-
-type TransportLayerHandler interface {
-	Handle(*IPv4Pdu) (*IPv4Pdu, error)
-}
+package edurouter
 
 type icmpHandler struct{}
 
@@ -29,13 +21,4 @@ func (i *icmpHandler) Handle(packet *IPv4Pdu) (*IPv4Pdu, error) {
 	}
 
 	return nil, ErrDropPdu
-}
-
-func (l *internetLayerStrategy) GetHandler(ipProto IPProtocol) (TransportLayerHandler, error) {
-	switch ipProto {
-	case IPProtocolICMPv4:
-		return l.icmpHandler, nil
-	default:
-		return nil, ErrNoInternetLayerHandler
-	}
 }

@@ -1,4 +1,4 @@
-package ifconfigv4
+package edurouter
 
 import (
 	"bytes"
@@ -8,14 +8,14 @@ import (
 	"sync"
 )
 
-type routeType uint8
+type RouteType uint8
 
 const (
-	LinkLocalRouteType routeType = 0
-	StaticRouteType    routeType = 1
+	LinkLocalRouteType RouteType = 0
+	StaticRouteType    RouteType = 1
 )
 
-func (r routeType) String() string {
+func (r RouteType) String() string {
 	switch r {
 	case LinkLocalRouteType:
 		return "lo"
@@ -27,7 +27,7 @@ func (r routeType) String() string {
 }
 
 type RouteInfo struct {
-	RouteType    routeType
+	RouteType    RouteType
 	DstNet       net.IPNet
 	OutInterface *InterfaceConfig
 	NextHop      *net.IP
@@ -38,6 +38,13 @@ type RouteTable struct {
 	mu               sync.Mutex
 }
 
+func NewRouteTable() *RouteTable {
+	return &RouteTable{
+		configuredRoutes: make([]RouteInfo, 0),
+		mu:               sync.Mutex{},
+	}
+}
+
 func (table *RouteTable) AddRoute(config RouteInfo) {
 	table.mu.Lock()
 	defer table.mu.Unlock()
@@ -45,7 +52,6 @@ func (table *RouteTable) AddRoute(config RouteInfo) {
 	table.configuredRoutes = append(table.configuredRoutes, config)
 
 	sort.Slice(table.configuredRoutes, func(i, j int) bool {
-
 		netIPi := binary.BigEndian.Uint32(table.configuredRoutes[i].DstNet.IP)
 		netIPj := binary.BigEndian.Uint32(table.configuredRoutes[j].DstNet.IP)
 		netMaskIPi := binary.BigEndian.Uint32(table.configuredRoutes[i].DstNet.Mask)
@@ -55,6 +61,24 @@ func (table *RouteTable) AddRoute(config RouteInfo) {
 			netIPi < netIPj &&
 			netMaskIPi < netMaskIPj
 	})
+}
+
+func (table *RouteTable) GetRoutes() []RouteInfo {
+	table.mu.Lock()
+	defer table.mu.Unlock()
+
+	r := make([]RouteInfo, len(table.configuredRoutes))
+
+	copy(r, table.configuredRoutes)
+	return r
+}
+
+func (table *RouteTable) DeleteRouteAtIndex(index uint32) {
+	table.mu.Lock()
+	defer table.mu.Unlock()
+
+	// ensure ordering to skip sorting afterwards
+	table.configuredRoutes = append(table.configuredRoutes[:index], table.configuredRoutes[index+1:]...)
 }
 
 func (table *RouteTable) getRouteInfoForPacket(ip *IPv4Pdu) (*RouteInfo, error) {
@@ -71,7 +95,7 @@ func (table *RouteTable) getRouteInfoForPacket(ip *IPv4Pdu) (*RouteInfo, error) 
 	return nil, ErrDropPdu
 }
 
-func (table *RouteTable) routePacket(ip *IPv4Pdu) (*IPv4Pdu, *RouteInfo, error) {
+func (table *RouteTable) RoutePacket(ip *IPv4Pdu) (*IPv4Pdu, *RouteInfo, error) {
 	ri, err := table.getRouteInfoForPacket(ip)
 
 	if err != nil {
@@ -79,6 +103,11 @@ func (table *RouteTable) routePacket(ip *IPv4Pdu) (*IPv4Pdu, *RouteInfo, error) 
 	}
 
 	ip.TTL--
+
+	if ip.TTL == 0 {
+		// time to live ended, dropping
+		return nil, nil, ErrDropPdu
+	}
 
 	return ip, ri, nil
 }
