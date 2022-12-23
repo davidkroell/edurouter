@@ -6,6 +6,8 @@ import (
 	"net"
 )
 
+//go:generate mockgen -destination ./internal/mocks/mock_arp_writer.go -package mocks github.com/davidkroell/edurouter ARPWriter
+
 type ARPWriter interface {
 	SendArpRequest(ip net.IP) error
 }

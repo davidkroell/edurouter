@@ -7,3 +7,8 @@ fileignoreconfig:
 - filename: docs/drawing-edurouter.drawio
   checksum: a19bbe4b454a25f52e5c6bd189d987c82e706ffe567c799a41998604b791a9c1
 version: ""
+
+fileignoreconfig:
+- filename: go.sum
+  checksum: 127a5c6c1023faea598f53ac9e5fffcf57f5e8fd781fc1e506f6554acfd092a1
+version: ""

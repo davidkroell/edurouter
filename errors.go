@@ -8,6 +8,8 @@ var (
 	ErrNoLinkLayerHandler     = errors.New("no link layer handler for given etherType found")
 	ErrUnsupportedArpProtocol = errors.New("unsupported ARP Version. requires ethernet+IPv4")
 
+	ErrNotAnMACHardwareAddress = errors.New("provided hardware address was no MAC address")
+
 	ErrNotAnIPv4Address       = errors.New("ip address it not an IPv4 address")
 	ErrNoInternetLayerHandler = errors.New("no internet layer handler for given IPProtocol found")
 	ErrARPTimeout             = errors.New("ARP timeout. no MAC found for this IP Address")
