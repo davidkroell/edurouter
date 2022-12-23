@@ -3,3 +3,7 @@ fileignoreconfig:
   checksum: 242d27da67f1055776256ae76f78f54a9a8cae8204d8298eb63193ed44da9626
 version: ""
 
+fileignoreconfig:
+- filename: docs/drawing-edurouter.drawio
+  checksum: a19bbe4b454a25f52e5c6bd189d987c82e706ffe567c799a41998604b791a9c1
+version: ""
