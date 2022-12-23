@@ -7,6 +7,7 @@ import (
 )
 
 //go:generate mockgen -destination ./internal/mocks/mock_arp_writer.go -package mocks github.com/davidkroell/edurouter ARPWriter
+//go:generate mockgen -destination ./internal/mocks/mock_net_packetconn.go -package mocks net PacketConn
 
 type ARPWriter interface {
 	SendArpRequest(ip net.IP) error
@@ -31,14 +32,14 @@ func (a *ARPv4Writer) SendArpRequest(ip net.IP) error {
 	}
 
 	req := ARPv4Pdu{
-		HTYPE:           1,
+		HTYPE:           HTYPEEthernet,
 		PTYPE:           ethernet.EtherTypeIPv4,
 		HLEN:            HardwareAddrLen,
 		PLEN:            net.IPv4len,
 		Operation:       ARPOperationRequest,
 		SrcHardwareAddr: *a.ifconfig.HardwareAddr,
 		SrcProtoAddr:    a.ifconfig.Addr.IP,
-		DstHardwareAddr: emptyHardwareAddr,
+		DstHardwareAddr: EmptyHardwareAddr,
 		DstProtoAddr:    ip,
 	}
 
@@ -60,6 +61,6 @@ func (a *ARPv4Writer) SendArpRequest(ip net.IP) error {
 		return err
 	}
 
-	_, err = a.c.WriteTo(frameBinary, &raw.Addr{HardwareAddr: ethernet.Broadcast})
+	_, err = a.c.WriteTo(frameBinary, &raw.Addr{HardwareAddr: frame.Destination})
 	return err
 }

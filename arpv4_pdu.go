@@ -16,7 +16,7 @@ const (
 	HTYPEEthernet                     = 1
 )
 
-var emptyHardwareAddr = []byte{
+var EmptyHardwareAddr = []byte{
 	0x0, 0x0, 0x0,
 	0x0, 0x0, 0x0,
 }
@@ -63,7 +63,7 @@ func (a *ARPv4Pdu) IsArpRequestForConfig(config *InterfaceConfig) bool {
 		return false
 	}
 
-	if !bytes.Equal(a.DstHardwareAddr, emptyHardwareAddr) {
+	if !bytes.Equal(a.DstHardwareAddr, EmptyHardwareAddr) {
 		// something went wrong, should be empty
 		return false
 	}
