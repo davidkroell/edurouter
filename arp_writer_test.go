@@ -17,11 +17,11 @@ func TestARPv4Writer(t *testing.T) {
 		IP:   []byte{192, 168, 100, 1},
 		Mask: net.CIDRMask(24, 32),
 	})
+	require.NoError(t, err)
 
 	hwAddr := net.HardwareAddr([]byte{10, 10, 10, 20, 20, 20})
 
 	config.HardwareAddr = &hwAddr
-	require.NoError(t, err)
 
 	arpWriter := edurouter.NewARPv4Writer(config)
 
