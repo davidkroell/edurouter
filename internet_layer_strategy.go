@@ -1,15 +1,20 @@
 package edurouter
 
-// TODO refactor this with interface
-type InternetLayerStrategy struct {
-	icmpHandler *icmpHandler
+//go:generate mockgen -destination ./internal/mocks/mock_internet_layer_strategy.go -package mocks github.com/davidkroell/edurouter InternetLayerStrategy
+
+type InternetLayerStrategy interface {
+	GetHandler(ipProto IPProtocol) (TransportLayerHandler, error)
 }
 
-func NewInternetLayerStrategy(icmpHandler *icmpHandler) *InternetLayerStrategy {
-	return &InternetLayerStrategy{icmpHandler: icmpHandler}
+type InternetLayerStrategyImpl struct {
+	icmpHandler *IcmpHandler
 }
 
-func (l *InternetLayerStrategy) GetHandler(ipProto IPProtocol) (TransportLayerHandler, error) {
+func NewInternetLayerStrategy(icmpHandler *IcmpHandler) *InternetLayerStrategyImpl {
+	return &InternetLayerStrategyImpl{icmpHandler: icmpHandler}
+}
+
+func (l *InternetLayerStrategyImpl) GetHandler(ipProto IPProtocol) (TransportLayerHandler, error) {
 	switch ipProto {
 	case IPProtocolICMPv4:
 		return l.icmpHandler, nil

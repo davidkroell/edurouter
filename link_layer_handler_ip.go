@@ -3,10 +3,10 @@ package edurouter
 import "github.com/mdlayher/ethernet"
 
 type IPv4LinkLayerHandler struct {
-	internetLayerHandler *InternetLayerHandler
+	internetLayerHandler *Internetv4LayerHandler
 }
 
-func NewIPv4LinkLayerHandler(internetLayerHandler *InternetLayerHandler) *IPv4LinkLayerHandler {
+func NewIPv4LinkLayerHandler(internetLayerHandler *Internetv4LayerHandler) *IPv4LinkLayerHandler {
 	return &IPv4LinkLayerHandler{internetLayerHandler: internetLayerHandler}
 }
 
@@ -18,7 +18,8 @@ func (llh *IPv4LinkLayerHandler) Handle(f *ethernet.Frame, ifconfig *InterfaceCo
 		return nil, err
 	}
 
-	ifconfig.arpTable.Store(ipv4Packet.SrcIP, f.Source)
+	// TODO handle error
+	ifconfig.ArpTable.Store(ipv4Packet.SrcIP, f.Source)
 
 	result, routeInfo, err := llh.internetLayerHandler.Handle(&ipv4Packet, ifconfig)
 	if err != nil {
@@ -37,9 +38,9 @@ func (llh *IPv4LinkLayerHandler) Handle(f *ethernet.Frame, ifconfig *InterfaceCo
 	}
 
 	if routeInfo.RouteType == LinkLocalRouteType {
-		outFrame.Destination, err = routeInfo.OutInterface.arpTable.Resolve(result.DstIP)
+		outFrame.Destination, err = routeInfo.OutInterface.ArpTable.Resolve(result.DstIP)
 	} else {
-		outFrame.Destination, err = routeInfo.OutInterface.arpTable.Resolve(*routeInfo.NextHop)
+		outFrame.Destination, err = routeInfo.OutInterface.ArpTable.Resolve(*routeInfo.NextHop)
 	}
 
 	if err != nil {

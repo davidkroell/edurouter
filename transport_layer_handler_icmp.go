@@ -1,8 +1,8 @@
 package edurouter
 
-type icmpHandler struct{}
+type IcmpHandler struct{}
 
-func (i *icmpHandler) Handle(packet *IPv4Pdu) (*IPv4Pdu, error) {
+func (i *IcmpHandler) Handle(packet *IPv4Pdu) (*IPv4Pdu, error) {
 	var icmpPacket ICMPPacket
 
 	err := (&icmpPacket).UnmarshalBinary(packet.Payload)

@@ -1,6 +1,7 @@
-package edurouter
+package edurouter_test
 
 import (
+	"github.com/davidkroell/edurouter"
 	"github.com/davidkroell/edurouter/internal/mocks"
 	"github.com/golang/mock/gomock"
 	"github.com/mdlayher/ethernet"
@@ -11,9 +12,9 @@ import (
 )
 
 func TestARPv4LinkLayerHandler_HandleARPRequests(t *testing.T) {
-	handler := NewARPv4LinkLayerHandler()
+	handler := edurouter.NewARPv4LinkLayerHandler()
 
-	config, err := NewInterfaceConfig("veth0", &net.IPNet{
+	config, err := edurouter.NewInterfaceConfig("veth0", &net.IPNet{
 		IP:   []byte{192, 168, 100, 1},
 		Mask: net.CIDRMask(24, 32),
 	})
@@ -22,29 +23,29 @@ func TestARPv4LinkLayerHandler_HandleARPRequests(t *testing.T) {
 	config.HardwareAddr = &hwa
 
 	tests := map[string]struct {
-		inputArp      ARPv4Pdu
+		inputArp      edurouter.ARPv4Pdu
 		wantErr       error
-		wantArpResult *ARPv4Pdu
+		wantArpResult *edurouter.ARPv4Pdu
 	}{
 		"ARPRequestSuccessfulResponse": {
-			inputArp: ARPv4Pdu{
-				HTYPE:           HTYPEEthernet,
+			inputArp: edurouter.ARPv4Pdu{
+				HTYPE:           edurouter.HTYPEEthernet,
 				PTYPE:           ethernet.EtherTypeARP,
-				HLEN:            HardwareAddrLen,
+				HLEN:            edurouter.HardwareAddrLen,
 				PLEN:            net.IPv4len,
-				Operation:       ARPOperationRequest,
+				Operation:       edurouter.ARPOperationRequest,
 				SrcHardwareAddr: []byte{1, 1, 1, 3, 3, 3},
 				SrcProtoAddr:    []byte{192, 168, 100, 100},
-				DstHardwareAddr: EmptyHardwareAddr,
+				DstHardwareAddr: edurouter.EmptyHardwareAddr,
 				DstProtoAddr:    []byte{192, 168, 100, 1},
 			},
 			wantErr: nil,
-			wantArpResult: &ARPv4Pdu{
-				HTYPE:           HTYPEEthernet,
+			wantArpResult: &edurouter.ARPv4Pdu{
+				HTYPE:           edurouter.HTYPEEthernet,
 				PTYPE:           ethernet.EtherTypeARP,
-				HLEN:            HardwareAddrLen,
+				HLEN:            edurouter.HardwareAddrLen,
 				PLEN:            net.IPv4len,
-				Operation:       ARPOperationResponse,
+				Operation:       edurouter.ARPOperationResponse,
 				SrcHardwareAddr: hwa,
 				SrcProtoAddr:    []byte{192, 168, 100, 1},
 				DstHardwareAddr: []byte{1, 1, 1, 3, 3, 3},
@@ -52,33 +53,33 @@ func TestARPv4LinkLayerHandler_HandleARPRequests(t *testing.T) {
 			},
 		},
 		"ErrUnsupportedArpProtocol": {
-			inputArp: ARPv4Pdu{
+			inputArp: edurouter.ARPv4Pdu{
 				HTYPE:           2,
 				PTYPE:           ethernet.EtherTypeARP,
-				HLEN:            HardwareAddrLen,
+				HLEN:            edurouter.HardwareAddrLen,
 				PLEN:            net.IPv4len,
-				Operation:       ARPOperationRequest,
+				Operation:       edurouter.ARPOperationRequest,
 				SrcHardwareAddr: []byte{1, 1, 1, 3, 3, 3},
 				SrcProtoAddr:    []byte{192, 168, 100, 100},
-				DstHardwareAddr: EmptyHardwareAddr,
+				DstHardwareAddr: edurouter.EmptyHardwareAddr,
 				DstProtoAddr:    []byte{192, 168, 100, 1},
 			},
-			wantErr:       ErrUnsupportedArpProtocol,
+			wantErr:       edurouter.ErrUnsupportedArpProtocol,
 			wantArpResult: nil,
 		},
 		"ARPRequestNotForInterfaceConfig": {
-			inputArp: ARPv4Pdu{
-				HTYPE:           HTYPEEthernet,
+			inputArp: edurouter.ARPv4Pdu{
+				HTYPE:           edurouter.HTYPEEthernet,
 				PTYPE:           ethernet.EtherTypeARP,
-				HLEN:            HardwareAddrLen,
+				HLEN:            edurouter.HardwareAddrLen,
 				PLEN:            net.IPv4len,
-				Operation:       ARPOperationRequest,
+				Operation:       edurouter.ARPOperationRequest,
 				SrcHardwareAddr: []byte{1, 1, 1, 3, 3, 3},
 				SrcProtoAddr:    []byte{192, 168, 100, 100},
-				DstHardwareAddr: EmptyHardwareAddr,
+				DstHardwareAddr: edurouter.EmptyHardwareAddr,
 				DstProtoAddr:    []byte{192, 168, 100, 50},
 			},
-			wantErr:       ErrDropPdu,
+			wantErr:       edurouter.ErrDropPdu,
 			wantArpResult: nil,
 		},
 	}
@@ -105,7 +106,7 @@ func TestARPv4LinkLayerHandler_HandleARPRequests(t *testing.T) {
 
 			assert.EqualValues(t, hwa, outFrame.Source)
 
-			var actualArpResponse ARPv4Pdu
+			var actualArpResponse edurouter.ARPv4Pdu
 			err = (&actualArpResponse).UnmarshalBinary(outFrame.Payload)
 
 			assert.EqualValues(t, *v.wantArpResult, actualArpResponse)
@@ -114,11 +115,11 @@ func TestARPv4LinkLayerHandler_HandleARPRequests(t *testing.T) {
 }
 
 func TestARPv4LinkLayerHandler_HandleARPResponse(t *testing.T) {
-	handler := NewARPv4LinkLayerHandler()
+	handler := edurouter.NewARPv4LinkLayerHandler()
 
 	ctrl := gomock.NewController(t)
 
-	config, err := NewInterfaceConfig("veth0", &net.IPNet{
+	config, err := edurouter.NewInterfaceConfig("veth0", &net.IPNet{
 		IP:   []byte{192, 168, 100, 1},
 		Mask: net.CIDRMask(24, 32),
 	})
@@ -126,19 +127,19 @@ func TestARPv4LinkLayerHandler_HandleARPResponse(t *testing.T) {
 	hwa := net.HardwareAddr([]byte{1, 1, 1, 2, 2, 2})
 	config.HardwareAddr = &hwa
 	mockArpWriter := mocks.NewMockARPWriter(ctrl)
-	config.arpTable = NewARPv4Table(config, mockArpWriter)
+	config.ArpTable = edurouter.NewARPv4Table(config, mockArpWriter)
 
 	srcProtoAddr := []byte{192, 168, 100, 100}
 	srcHardwareAddr := []byte{1, 1, 1, 3, 3, 3}
-	inputArp := ARPv4Pdu{
-		HTYPE:           HTYPEEthernet,
+	inputArp := edurouter.ARPv4Pdu{
+		HTYPE:           edurouter.HTYPEEthernet,
 		PTYPE:           ethernet.EtherTypeARP,
-		HLEN:            HardwareAddrLen,
+		HLEN:            edurouter.HardwareAddrLen,
 		PLEN:            net.IPv4len,
-		Operation:       ARPOperationResponse,
+		Operation:       edurouter.ARPOperationResponse,
 		SrcHardwareAddr: srcHardwareAddr,
 		SrcProtoAddr:    srcProtoAddr,
-		DstHardwareAddr: EmptyHardwareAddr,
+		DstHardwareAddr: edurouter.EmptyHardwareAddr,
 		DstProtoAddr:    []byte{192, 168, 100, 1},
 	}
 
@@ -153,10 +154,10 @@ func TestARPv4LinkLayerHandler_HandleARPResponse(t *testing.T) {
 	}
 
 	outFrame, err := handler.Handle(&inFrame, config)
-	require.EqualError(t, err, HandledPdu.Error())
+	require.EqualError(t, err, edurouter.HandledPdu.Error())
 	require.Nil(t, outFrame)
 
-	actualHardwareAddr, err := config.arpTable.Resolve([]byte{192, 168, 100, 100})
+	actualHardwareAddr, err := config.ArpTable.Resolve([]byte{192, 168, 100, 100})
 	assert.NoError(t, err)
 	assert.EqualValues(t, srcHardwareAddr, actualHardwareAddr)
 }

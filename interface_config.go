@@ -18,7 +18,7 @@ type InterfaceConfig struct {
 	HardwareAddr       *net.HardwareAddr
 	Addr               *net.IPNet
 	RealIPAddr         *net.IPNet
-	arpTable           *ARPv4Table
+	ArpTable           *ARPv4Table
 	managedConnections map[ethernet.EtherType]net.PacketConn
 }
 
@@ -37,7 +37,7 @@ func NewInterfaceConfig(name string, addr *net.IPNet) (*InterfaceConfig, error) 
 func (i *InterfaceConfig) SetupAndListen(ctx context.Context, supportedEtherTypes []ethernet.EtherType, frameChan chan<- frameFromInterface) {
 	arpWriter := NewARPv4Writer(i)
 
-	i.arpTable = NewARPv4Table(i, arpWriter)
+	i.ArpTable = NewARPv4Table(i, arpWriter)
 
 	// Select the interface to use for Ethernet traffic
 	ifi, err := net.InterfaceByName(i.InterfaceName)

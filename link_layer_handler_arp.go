@@ -21,7 +21,7 @@ func (llh *ARPv4LinkLayerHandler) Handle(f *ethernet.Frame, ifconfig *InterfaceC
 	}
 
 	if packet.IsArpResponse() {
-		ifconfig.arpTable.Store(packet.SrcProtoAddr, packet.SrcHardwareAddr)
+		ifconfig.ArpTable.Store(packet.SrcProtoAddr, packet.SrcHardwareAddr)
 		return nil, HandledPdu
 	}
 

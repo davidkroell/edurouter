@@ -41,7 +41,7 @@ func NewLinkLayerListener(interfaces ...*InterfaceConfig) *LinkLayerListener {
 		interfaces: interfaces,
 		strategy: NewLinkLayerStrategy(map[ethernet.EtherType]LinkLayerHandler{
 			ethernet.EtherTypeARP:  NewARPv4LinkLayerHandler(),
-			ethernet.EtherTypeIPv4: NewIPv4LinkLayerHandler(NewInternetLayerHandler(NewInternetLayerStrategy(&icmpHandler{}), routeTable)),
+			ethernet.EtherTypeIPv4: NewIPv4LinkLayerHandler(NewInternetLayerHandler(NewInternetLayerStrategy(&IcmpHandler{}), routeTable)),
 		}),
 	}
 }
