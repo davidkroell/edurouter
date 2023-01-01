@@ -42,5 +42,4 @@ func TestInternetLayerStrategyImpl_GetHandler(t *testing.T) {
 			assert.EqualValues(t, handler, v.wantHandler)
 		})
 	}
-
 }
