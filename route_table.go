@@ -35,13 +35,13 @@ type RouteInfo struct {
 
 type RouteTable struct {
 	configuredRoutes []RouteInfo
-	mu               sync.Mutex
+	mu               sync.RWMutex
 }
 
 func NewRouteTable() *RouteTable {
 	return &RouteTable{
 		configuredRoutes: make([]RouteInfo, 0),
-		mu:               sync.Mutex{},
+		mu:               sync.RWMutex{},
 	}
 }
 
@@ -64,8 +64,8 @@ func (table *RouteTable) AddRoute(config RouteInfo) {
 }
 
 func (table *RouteTable) GetRoutes() []RouteInfo {
-	table.mu.Lock()
-	defer table.mu.Unlock()
+	table.mu.RLock()
+	defer table.mu.RUnlock()
 
 	r := make([]RouteInfo, len(table.configuredRoutes))
 
@@ -82,8 +82,8 @@ func (table *RouteTable) DeleteRouteAtIndex(index uint32) {
 }
 
 func (table *RouteTable) getRouteInfoForPacket(ip *IPv4Pdu) (*RouteInfo, error) {
-	table.mu.Lock()
-	defer table.mu.Unlock()
+	table.mu.RLock()
+	defer table.mu.RUnlock()
 
 	for _, ri := range table.configuredRoutes {
 		if bytes.Equal(ip.DstIP.Mask(ri.DstNet.Mask), ri.DstNet.IP) {
