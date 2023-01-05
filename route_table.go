@@ -45,22 +45,30 @@ func NewRouteTable() *RouteTable {
 	}
 }
 
-func (table *RouteTable) AddRoute(config RouteInfo) {
+func (table *RouteTable) AddRoute(config RouteInfo) error {
+	if !bytes.Equal(config.DstNet.IP.Mask(config.DstNet.Mask), config.DstNet.IP) {
+		return ErrNotANetworkAddress
+	}
+
 	table.mu.Lock()
 	defer table.mu.Unlock()
 
 	table.configuredRoutes = append(table.configuredRoutes, config)
 
-	sort.Slice(table.configuredRoutes, func(i, j int) bool {
+	// sort slice by most exact match
+	sort.SliceStable(table.configuredRoutes, func(i, j int) bool {
 		netIPi := binary.BigEndian.Uint32(table.configuredRoutes[i].DstNet.IP)
 		netIPj := binary.BigEndian.Uint32(table.configuredRoutes[j].DstNet.IP)
 		netMaskIPi := binary.BigEndian.Uint32(table.configuredRoutes[i].DstNet.Mask)
 		netMaskIPj := binary.BigEndian.Uint32(table.configuredRoutes[j].DstNet.Mask)
 
-		return table.configuredRoutes[i].RouteType < table.configuredRoutes[j].RouteType &&
-			netIPi < netIPj &&
-			netMaskIPi < netMaskIPj
+		return table.configuredRoutes[i].RouteType < table.configuredRoutes[j].RouteType || // ascending by route type (pseudo-metric)
+			// ascending by IP
+			netIPi < netIPj ||
+			// descending by netMask: means more exact match
+			netMaskIPi > netMaskIPj
 	})
+	return nil
 }
 
 func (table *RouteTable) GetRoutes() []RouteInfo {
@@ -73,9 +81,13 @@ func (table *RouteTable) GetRoutes() []RouteInfo {
 	return r
 }
 
-func (table *RouteTable) DeleteRouteAtIndex(index uint32) {
+func (table *RouteTable) DeleteRouteAtIndex(index uint) {
 	table.mu.Lock()
 	defer table.mu.Unlock()
+
+	if int(index) >= len(table.configuredRoutes) {
+		return
+	}
 
 	// ensure ordering to skip sorting afterwards
 	table.configuredRoutes = append(table.configuredRoutes[:index], table.configuredRoutes[index+1:]...)

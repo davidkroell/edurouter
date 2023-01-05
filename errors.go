@@ -14,4 +14,6 @@ var (
 	ErrNoInternetLayerHandler = errors.New("no internet layer handler for given IPProtocol found")
 	ErrARPTimeout             = errors.New("ARP timeout. no MAC found for this IP Address")
 	ErrARPPacketConn          = errors.New("outbound PacketConn was nil")
+
+	ErrNotANetworkAddress = errors.New("not a correct network address")
 )
