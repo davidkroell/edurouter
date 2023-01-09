@@ -15,5 +15,7 @@ var (
 	ErrARPTimeout             = errors.New("ARP timeout. no MAC found for this IP Address")
 	ErrARPPacketConn          = errors.New("outbound PacketConn was nil")
 
-	ErrNotANetworkAddress = errors.New("not a correct network address")
+	ErrNotANetworkAddress                 = errors.New("not a correct network address")
+	ErrNextHopNotOnLinkLocalNetwork       = errors.New("next hop is not on local network of the outbound interface")
+	ErrLinkLocalRouteShouldNotHaveNextHop = errors.New("a link-local route should not have a next hop address defined")
 )

@@ -33,6 +33,32 @@ type RouteInfo struct {
 	NextHop      *net.IP
 }
 
+func (ri *RouteInfo) Validate() error {
+	isNetworkAddr := bytes.Equal(ri.DstNet.IP.Mask(ri.DstNet.Mask), ri.DstNet.IP)
+	if !isNetworkAddr {
+		return ErrNotANetworkAddress
+	}
+
+	if ri.RouteType == LinkLocalRouteType {
+		if ri.NextHop != nil {
+			return ErrLinkLocalRouteShouldNotHaveNextHop
+		} else {
+			return nil
+		}
+	}
+
+	// check if OutInterface and NextHop are on same network by masking both with the
+	// OutInterface subnet mask
+	if ri.OutInterface == nil ||
+		ri.NextHop == nil ||
+		!bytes.Equal(ri.OutInterface.Addr.IP.Mask(ri.OutInterface.Addr.Mask),
+			ri.NextHop.Mask(ri.OutInterface.Addr.Mask)) {
+		return ErrNextHopNotOnLinkLocalNetwork
+	}
+
+	return nil
+}
+
 type RouteTable struct {
 	configuredRoutes []RouteInfo
 	mu               sync.RWMutex
@@ -46,8 +72,9 @@ func NewRouteTable() *RouteTable {
 }
 
 func (table *RouteTable) AddRoute(config RouteInfo) error {
-	if !bytes.Equal(config.DstNet.IP.Mask(config.DstNet.Mask), config.DstNet.IP) {
-		return ErrNotANetworkAddress
+	err := config.Validate()
+	if err != nil {
+		return err
 	}
 
 	table.mu.Lock()

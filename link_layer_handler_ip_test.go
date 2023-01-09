@@ -30,7 +30,9 @@ func TestIPv4LinkLayerHandler_HandleICMPRequest(t *testing.T) {
 		IP:   routerIP,
 		Mask: net.CIDRMask(24, 32),
 	})
-	routeTable.AddRoute(edurouter.RouteInfo{
+	require.NoError(t, err)
+
+	err = routeTable.AddRoute(edurouter.RouteInfo{
 		RouteType: edurouter.LinkLocalRouteType,
 		DstNet: net.IPNet{
 			IP:   []byte{192, 168, 100, 0},
