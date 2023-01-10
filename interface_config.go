@@ -10,7 +10,8 @@ import (
 )
 
 const (
-	HardwareAddrLen = 6
+	HardwareAddrLen             = 6
+	InterfaceConfigFormatString = "interfaceName:IPv4/Mask"
 )
 
 type InterfaceConfig struct {
@@ -20,6 +21,25 @@ type InterfaceConfig struct {
 	RealIPAddr         *net.IPNet
 	ArpTable           *ARPv4Table
 	managedConnections map[ethernet.EtherType]net.PacketConn
+}
+
+func ParseInterfaceConfig(config string) (*InterfaceConfig, error) {
+	splitted := strings.Split(config, ":")
+
+	if len(splitted) != 2 {
+		return nil, ErrInvalidInterfaceConfigString
+	}
+
+	name := splitted[0]
+	ip, ipNet, err := net.ParseCIDR(splitted[1])
+
+	if err != nil {
+		return nil, err
+	}
+
+	ipNet.IP = ip
+
+	return NewInterfaceConfig(name, ipNet)
 }
 
 func NewInterfaceConfig(name string, addr *net.IPNet) (*InterfaceConfig, error) {

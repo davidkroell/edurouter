@@ -18,4 +18,6 @@ var (
 	ErrNotANetworkAddress                 = errors.New("not a correct network address")
 	ErrNextHopNotOnLinkLocalNetwork       = errors.New("next hop is not on local network of the outbound interface")
 	ErrLinkLocalRouteShouldNotHaveNextHop = errors.New("a link-local route should not have a next hop address defined")
+
+	ErrInvalidInterfaceConfigString = errors.New("invalid interface config string. malformed input, should have following format: '" + InterfaceConfigFormatString + "'")
 )
