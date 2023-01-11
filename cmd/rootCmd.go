@@ -1,4 +1,4 @@
-package main
+package cmd
 
 import (
 	"github.com/davidkroell/edurouter"
@@ -26,7 +26,7 @@ The router supports following protocols on the IPv4 network stack:
 It can be configured via the CLI, and supports a wide range of Linux distributions.
 Requires root privileges to run.
 
-Version: ` + version,
+Version: ` + edurouter.Version(),
 		// Uncomment the following line if your bare application
 		// has an action associated with it:
 		RunE: func(cmd *cobra.Command, args []string) error {

@@ -1,7 +1,7 @@
 package main
 
-const version = "v0.1.0"
+import "github.com/davidkroell/edurouter/cmd"
 
 func main() {
-	Execute()
+	cmd.Execute()
 }
