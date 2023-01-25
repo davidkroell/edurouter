@@ -1,44 +1,68 @@
 package edurouter
 
-import "github.com/mdlayher/ethernet"
+import (
+	"context"
+	"github.com/mdlayher/ethernet"
+)
 
-type ARPv4LinkLayerHandler struct{}
-
-func NewARPv4LinkLayerHandler() *ARPv4LinkLayerHandler {
-	return &ARPv4LinkLayerHandler{}
+type ARPv4LinkLayerHandler struct {
+	supplierCh chan FrameFromInterface
+	publishCh  chan<- *ethernet.Frame
 }
-func (llh *ARPv4LinkLayerHandler) Handle(f *ethernet.Frame, ifconfig *InterfaceConfig) (*ethernet.Frame, error) {
-	var packet ARPv4Pdu
 
-	// ARP logic
-	err := (&packet).UnmarshalBinary(f.Payload)
-	if err != nil {
-		return nil, err
+func (llh *ARPv4LinkLayerHandler) SupplierC() chan<- FrameFromInterface {
+	return llh.supplierCh
+}
+
+func NewARPv4LinkLayerHandler(publishCh chan<- *ethernet.Frame) *ARPv4LinkLayerHandler {
+	return &ARPv4LinkLayerHandler{
+		supplierCh: make(chan FrameFromInterface, 128),
+		publishCh:  publishCh,
 	}
+}
 
-	if !packet.IsEthernetAndIPv4() {
-		return nil, ErrUnsupportedArpProtocol
-	}
+func (llh *ARPv4LinkLayerHandler) RunHandler(ctx context.Context) {
+	go llh.runHandler(ctx)
+}
 
-	if packet.IsArpResponse() {
-		ifconfig.ArpTable.Store(packet.SrcProtoAddr, packet.SrcHardwareAddr)
-		return nil, HandledPdu
-	}
+func (llh *ARPv4LinkLayerHandler) runHandler(ctx context.Context) {
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case f := <-llh.supplierCh:
+			var packet ARPv4Pdu
 
-	if packet.IsArpRequestForConfig(ifconfig) {
-		arpResponse := packet.BuildARPResponseWithConfig(ifconfig)
+			// ARP logic
+			err := (&packet).UnmarshalBinary(f.Frame.Payload)
+			if err != nil {
+				continue
+			}
 
-		arpBinary, err := arpResponse.MarshalBinary()
-		if err != nil {
-			return nil, ErrDropPdu
+			if !packet.IsEthernetAndIPv4() {
+				continue
+			}
+
+			if packet.IsArpResponse() {
+				f.InInterface.ArpTable.Store(packet.SrcProtoAddr, packet.SrcHardwareAddr)
+				continue
+			}
+
+			if packet.IsArpRequestForConfig(f.InInterface) {
+				arpResponse := packet.BuildARPResponseWithConfig(f.InInterface)
+
+				arpBinary, err := arpResponse.MarshalBinary()
+				if err != nil {
+					continue
+				}
+
+				llh.publishCh <- &ethernet.Frame{
+					Destination: f.Frame.Source,
+					Source:      *f.InInterface.HardwareAddr,
+					EtherType:   ethernet.EtherTypeARP,
+					Payload:     arpBinary,
+				}
+			}
 		}
-
-		return &ethernet.Frame{
-			Destination: f.Source,
-			Source:      *ifconfig.HardwareAddr,
-			EtherType:   ethernet.EtherTypeARP,
-			Payload:     arpBinary,
-		}, nil
 	}
-	return nil, ErrDropPdu
 }

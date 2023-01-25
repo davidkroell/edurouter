@@ -1,6 +1,7 @@
 package edurouter_test
 
 import (
+	"context"
 	"github.com/davidkroell/edurouter"
 	"github.com/davidkroell/edurouter/internal/mocks"
 	"github.com/golang/mock/gomock"
@@ -9,10 +10,15 @@ import (
 	"github.com/stretchr/testify/require"
 	"net"
 	"testing"
+	"time"
 )
 
 func TestARPv4LinkLayerHandler_HandleARPRequests(t *testing.T) {
-	handler := edurouter.NewARPv4LinkLayerHandler()
+	publishCh := make(chan *ethernet.Frame)
+	handler := edurouter.NewARPv4LinkLayerHandler(publishCh)
+	ctx, cancel := context.WithCancel(context.Background())
+	handler.RunHandler(ctx)
+	defer cancel()
 
 	config, err := edurouter.NewInterfaceConfig("veth0", &net.IPNet{
 		IP:   []byte{192, 168, 100, 1},
@@ -24,7 +30,6 @@ func TestARPv4LinkLayerHandler_HandleARPRequests(t *testing.T) {
 
 	tests := map[string]struct {
 		inputArp      edurouter.ARPv4Pdu
-		wantErr       error
 		wantArpResult *edurouter.ARPv4Pdu
 	}{
 		"ARPRequestSuccessfulResponse": {
@@ -39,7 +44,6 @@ func TestARPv4LinkLayerHandler_HandleARPRequests(t *testing.T) {
 				DstHardwareAddr: edurouter.EmptyHardwareAddr,
 				DstProtoAddr:    []byte{192, 168, 100, 1},
 			},
-			wantErr: nil,
 			wantArpResult: &edurouter.ARPv4Pdu{
 				HTYPE:           edurouter.HTYPEEthernet,
 				PTYPE:           ethernet.EtherTypeARP,
@@ -64,7 +68,6 @@ func TestARPv4LinkLayerHandler_HandleARPRequests(t *testing.T) {
 				DstHardwareAddr: edurouter.EmptyHardwareAddr,
 				DstProtoAddr:    []byte{192, 168, 100, 1},
 			},
-			wantErr:       edurouter.ErrUnsupportedArpProtocol,
 			wantArpResult: nil,
 		},
 		"ARPRequestNotForInterfaceConfig": {
@@ -79,7 +82,6 @@ func TestARPv4LinkLayerHandler_HandleARPRequests(t *testing.T) {
 				DstHardwareAddr: edurouter.EmptyHardwareAddr,
 				DstProtoAddr:    []byte{192, 168, 100, 50},
 			},
-			wantErr:       edurouter.ErrDropPdu,
 			wantArpResult: nil,
 		},
 	}
@@ -97,12 +99,15 @@ func TestARPv4LinkLayerHandler_HandleARPRequests(t *testing.T) {
 				Payload:     arpBinary,
 			}
 
-			outFrame, err := handler.Handle(&inFrame, config)
-			require.EqualValues(t, v.wantErr, err)
+			handler.SupplierC() <- edurouter.FrameFromInterface{
+				Frame:       &inFrame,
+				InInterface: config,
+			}
 
-			if outFrame == nil {
+			if v.wantArpResult == nil {
 				return
 			}
+			outFrame := <-publishCh
 
 			assert.EqualValues(t, hwa, outFrame.Source)
 
@@ -115,7 +120,11 @@ func TestARPv4LinkLayerHandler_HandleARPRequests(t *testing.T) {
 }
 
 func TestARPv4LinkLayerHandler_HandleARPResponse(t *testing.T) {
-	handler := edurouter.NewARPv4LinkLayerHandler()
+	ch := make(chan *ethernet.Frame)
+	handler := edurouter.NewARPv4LinkLayerHandler(ch)
+	ctx, cancel := context.WithCancel(context.Background())
+	handler.RunHandler(ctx)
+	defer cancel()
 
 	ctrl := gomock.NewController(t)
 
@@ -153,11 +162,15 @@ func TestARPv4LinkLayerHandler_HandleARPResponse(t *testing.T) {
 		Payload:     arpBinary,
 	}
 
-	outFrame, err := handler.Handle(&inFrame, config)
-	require.EqualError(t, err, edurouter.HandledPdu.Error())
-	require.Nil(t, outFrame)
+	handler.SupplierC() <- edurouter.FrameFromInterface{
+		Frame:       &inFrame,
+		InInterface: config,
+	}
 
-	actualHardwareAddr, err := config.ArpTable.Resolve([]byte{192, 168, 100, 100})
-	assert.NoError(t, err)
-	assert.EqualValues(t, srcHardwareAddr, actualHardwareAddr)
+	select {
+	case <-ch:
+		t.Fail()
+	case <-time.After(time.Second):
+		// no answer expected
+	}
 }

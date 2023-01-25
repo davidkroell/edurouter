@@ -9,8 +9,9 @@ import (
 )
 
 type LinkLayerListener struct {
-	interfaces []*InterfaceConfig
-	strategy   *LinkLayerStrategy
+	interfaces    []*InterfaceConfig
+	strategy      *LinkLayerStrategy
+	fromHandlerCh chan *ethernet.Frame
 }
 
 func NewLinkLayerListener(interfaces ...*InterfaceConfig) *LinkLayerListener {
@@ -37,27 +38,36 @@ func NewLinkLayerListener(interfaces ...*InterfaceConfig) *LinkLayerListener {
 		NextHop:      &net.IP{192, 168, 0, 1},
 	})
 
+	fromHandlerCh := make(chan *ethernet.Frame, 128)
+
+	arpHandler := NewARPv4LinkLayerHandler(fromHandlerCh)
+	arpHandler.RunHandler(context.TODO()) // TODO do not run in ctor
+
+	ipv4Handler := NewIPv4LinkLayerHandler(fromHandlerCh, NewInternetLayerHandler(NewInternetLayerStrategy(&IcmpHandler{}), routeTable))
+	ipv4Handler.RunHandler(context.TODO()) // TODO do not run in ctor
+
 	return &LinkLayerListener{
-		interfaces: interfaces,
+		interfaces:    interfaces,
+		fromHandlerCh: fromHandlerCh,
 		strategy: NewLinkLayerStrategy(map[ethernet.EtherType]LinkLayerHandler{
-			ethernet.EtherTypeARP:  NewARPv4LinkLayerHandler(),
-			ethernet.EtherTypeIPv4: NewIPv4LinkLayerHandler(NewInternetLayerHandler(NewInternetLayerStrategy(&IcmpHandler{}), routeTable)),
+			ethernet.EtherTypeARP:  arpHandler,
+			ethernet.EtherTypeIPv4: ipv4Handler,
 		}),
 	}
 }
 
-type frameFromInterface struct {
-	frame       *ethernet.Frame
-	inInterface *InterfaceConfig
+type FrameFromInterface struct {
+	Frame       *ethernet.Frame
+	InInterface *InterfaceConfig
 }
 
 func (listener *LinkLayerListener) ListenAndServe(ctx context.Context) {
 
-	frameChan := make(chan frameFromInterface)
+	fromInterfaceCh := make(chan FrameFromInterface)
 	supportedEtherTypes := listener.strategy.GetSupportedEtherTypes()
 
 	for _, iface := range listener.interfaces {
-		iface.SetupAndListen(ctx, supportedEtherTypes, frameChan)
+		iface.SetupAndListen(ctx, supportedEtherTypes, fromInterfaceCh)
 	}
 
 	// read frames from supplier channel
@@ -65,20 +75,22 @@ func (listener *LinkLayerListener) ListenAndServe(ctx context.Context) {
 		select {
 		case <-ctx.Done():
 			return
-		case f := <-frameChan:
-			handler, err := listener.strategy.GetHandler(f.frame.EtherType)
+		case f := <-fromInterfaceCh:
+			handler, err := listener.strategy.GetHandler(f.Frame.EtherType)
 			if err != nil {
 				continue
 			}
 
-			frameToSend, err := handler.Handle(f.frame, f.inInterface)
+			handler.SupplierC() <- f
 			if err == ErrDropPdu || err != nil {
 				continue
 			}
+		case frame := <-listener.fromHandlerCh:
+			var err error
 
 			for _, iface := range listener.interfaces {
-				if bytes.Equal(*iface.HardwareAddr, frameToSend.Source) {
-					err = iface.WriteFrame(frameToSend)
+				if bytes.Equal(*iface.HardwareAddr, frame.Source) {
+					err = iface.WriteFrame(frame)
 					break
 				}
 			}

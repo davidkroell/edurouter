@@ -54,7 +54,7 @@ func NewInterfaceConfig(name string, addr *net.IPNet) (*InterfaceConfig, error) 
 	}, nil
 }
 
-func (i *InterfaceConfig) SetupAndListen(ctx context.Context, supportedEtherTypes []ethernet.EtherType, frameChan chan<- frameFromInterface) {
+func (i *InterfaceConfig) SetupAndListen(ctx context.Context, supportedEtherTypes []ethernet.EtherType, frameChan chan<- FrameFromInterface) {
 	arpWriter := NewARPv4Writer(i)
 
 	i.ArpTable = NewARPv4Table(i, arpWriter)
@@ -96,7 +96,7 @@ func (i *InterfaceConfig) SetupAndListen(ctx context.Context, supportedEtherType
 	}
 }
 
-func (i *InterfaceConfig) readFramesFromConn(ctx context.Context, mtu int, conn net.PacketConn, outChan chan<- frameFromInterface) {
+func (i *InterfaceConfig) readFramesFromConn(ctx context.Context, mtu int, conn net.PacketConn, outChan chan<- FrameFromInterface) {
 	// TODO implement context close -> close conn
 
 	// Accept frames up to interface's MTU in size
@@ -119,9 +119,9 @@ func (i *InterfaceConfig) readFramesFromConn(ctx context.Context, mtu int, conn 
 			continue
 		}
 
-		outChan <- frameFromInterface{
-			frame:       &f,
-			inInterface: i,
+		outChan <- FrameFromInterface{
+			Frame:       &f,
+			InInterface: i,
 		}
 	}
 }

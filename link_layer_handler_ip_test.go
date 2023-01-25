@@ -1,6 +1,7 @@
 package edurouter_test
 
 import (
+	"context"
 	"github.com/davidkroell/edurouter"
 	"github.com/davidkroell/edurouter/internal/mocks"
 	"github.com/golang/mock/gomock"
@@ -21,7 +22,11 @@ func TestIPv4LinkLayerHandler_HandleICMPRequest(t *testing.T) {
 
 	internetLayerHandler := edurouter.NewInternetLayerHandler(mockInternetLayerStrategy, routeTable)
 
-	handler := edurouter.NewIPv4LinkLayerHandler(internetLayerHandler)
+	publishCh := make(chan *ethernet.Frame)
+	handler := edurouter.NewIPv4LinkLayerHandler(publishCh, internetLayerHandler)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	handler.RunHandler(ctx)
 
 	routerIP := []byte{192, 168, 100, 1}
 	pingSourceIp := []byte{192, 168, 100, 50}
@@ -93,9 +98,12 @@ func TestIPv4LinkLayerHandler_HandleICMPRequest(t *testing.T) {
 
 	mockInternetLayerStrategy.EXPECT().GetHandler(inputIP.Protocol).Return(icmpHandler, nil)
 
-	outFrame, err := handler.Handle(&inFrame, config)
-	require.NoError(t, err)
-	require.NotNil(t, outFrame)
+	handler.SupplierC() <- edurouter.FrameFromInterface{
+		Frame:       &inFrame,
+		InInterface: config,
+	}
+
+	outFrame := <-publishCh
 
 	assert.EqualValues(t, hwaDst, outFrame.Source)
 

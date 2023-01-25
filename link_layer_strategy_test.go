@@ -8,7 +8,7 @@ import (
 )
 
 func TestLinkLayerStrategy_GetHandler(t *testing.T) {
-	arpHandler := edurouter.NewARPv4LinkLayerHandler()
+	arpHandler := edurouter.NewARPv4LinkLayerHandler(nil)
 	strategy := edurouter.NewLinkLayerStrategy(map[ethernet.EtherType]edurouter.LinkLayerHandler{
 		ethernet.EtherTypeARP: arpHandler,
 	})

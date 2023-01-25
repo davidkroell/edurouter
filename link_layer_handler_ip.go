@@ -1,51 +1,72 @@
 package edurouter
 
-import "github.com/mdlayher/ethernet"
+import (
+	"context"
+	"github.com/mdlayher/ethernet"
+)
 
 type IPv4LinkLayerHandler struct {
+	supplierCh           chan FrameFromInterface
+	publishCh            chan<- *ethernet.Frame
 	internetLayerHandler *Internetv4LayerHandler
 }
 
-func NewIPv4LinkLayerHandler(internetLayerHandler *Internetv4LayerHandler) *IPv4LinkLayerHandler {
-	return &IPv4LinkLayerHandler{internetLayerHandler: internetLayerHandler}
+func (llh *IPv4LinkLayerHandler) SupplierC() chan<- FrameFromInterface {
+	return llh.supplierCh
 }
 
-func (llh *IPv4LinkLayerHandler) Handle(f *ethernet.Frame, ifconfig *InterfaceConfig) (*ethernet.Frame, error) {
-	var ipv4Packet IPv4Pdu
-
-	err := (&ipv4Packet).UnmarshalBinary(f.Payload)
-	if err != nil {
-		return nil, err
+func NewIPv4LinkLayerHandler(publishCh chan<- *ethernet.Frame, internetLayerHandler *Internetv4LayerHandler) *IPv4LinkLayerHandler {
+	return &IPv4LinkLayerHandler{
+		supplierCh:           make(chan FrameFromInterface, 128),
+		publishCh:            publishCh,
+		internetLayerHandler: internetLayerHandler,
 	}
+}
 
-	// TODO handle error
-	ifconfig.ArpTable.Store(ipv4Packet.SrcIP, f.Source)
+func (llh *IPv4LinkLayerHandler) RunHandler(ctx context.Context) {
+	go llh.runHandler(ctx)
+}
 
-	result, routeInfo, err := llh.internetLayerHandler.Handle(&ipv4Packet, ifconfig)
-	if err != nil {
-		return nil, err
+func (llh *IPv4LinkLayerHandler) runHandler(ctx context.Context) {
+	for {
+		select {
+		case <-ctx.Done():
+			return
+
+		case f := <-llh.supplierCh:
+			var ipv4Packet IPv4Pdu
+
+			err := (&ipv4Packet).UnmarshalBinary(f.Frame.Payload)
+			if err != nil {
+				continue
+			}
+
+			// TODO handle error
+			f.InInterface.ArpTable.Store(ipv4Packet.SrcIP, f.Frame.Source)
+
+			result, routeInfo, err := llh.internetLayerHandler.Handle(&ipv4Packet, f.InInterface)
+			if err != nil {
+				continue
+			}
+
+			framePayload, err := result.MarshalBinary()
+			if err != nil {
+				continue
+			}
+
+			outFrame := &ethernet.Frame{
+				Source:    *routeInfo.OutInterface.HardwareAddr,
+				EtherType: f.Frame.EtherType,
+				Payload:   framePayload,
+			}
+
+			if routeInfo.RouteType == LinkLocalRouteType {
+				outFrame.Destination, err = routeInfo.OutInterface.ArpTable.Resolve(result.DstIP)
+			} else {
+				outFrame.Destination, err = routeInfo.OutInterface.ArpTable.Resolve(*routeInfo.NextHop)
+			}
+
+			llh.publishCh <- outFrame
+		}
 	}
-
-	framePayload, err := result.MarshalBinary()
-	if err != nil {
-		return nil, err
-	}
-
-	outFrame := &ethernet.Frame{
-		Source:    *routeInfo.OutInterface.HardwareAddr,
-		EtherType: f.EtherType,
-		Payload:   framePayload,
-	}
-
-	if routeInfo.RouteType == LinkLocalRouteType {
-		outFrame.Destination, err = routeInfo.OutInterface.ArpTable.Resolve(result.DstIP)
-	} else {
-		outFrame.Destination, err = routeInfo.OutInterface.ArpTable.Resolve(*routeInfo.NextHop)
-	}
-
-	if err != nil {
-		return nil, err
-	}
-
-	return outFrame, nil
 }
