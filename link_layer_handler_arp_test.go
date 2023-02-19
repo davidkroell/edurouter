@@ -99,9 +99,9 @@ func TestARPv4LinkLayerHandler_HandleARPRequests(t *testing.T) {
 				Payload:     arpBinary,
 			}
 
-			handler.SupplierC() <- edurouter.FrameFromInterface{
-				Frame:       &inFrame,
-				InInterface: config,
+			handler.SupplierC() <- edurouter.FrameIn{
+				Frame:     &inFrame,
+				Interface: config,
 			}
 
 			if v.wantArpResult == nil {
@@ -162,9 +162,9 @@ func TestARPv4LinkLayerHandler_HandleARPResponse(t *testing.T) {
 		Payload:     arpBinary,
 	}
 
-	handler.SupplierC() <- edurouter.FrameFromInterface{
-		Frame:       &inFrame,
-		InInterface: config,
+	handler.SupplierC() <- edurouter.FrameIn{
+		Frame:     &inFrame,
+		Interface: config,
 	}
 
 	select {

@@ -131,7 +131,7 @@ func (table *RouteTable) getRouteInfoForPacket(ip *IPv4Pdu) (*RouteInfo, error) 
 		}
 	}
 
-	return nil, ErrDropPdu
+	return nil, ErrNoRoute
 }
 
 func (table *RouteTable) RoutePacket(ip *IPv4Pdu) (*IPv4Pdu, *RouteInfo, error) {

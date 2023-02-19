@@ -6,17 +6,17 @@ import (
 )
 
 type ARPv4LinkLayerHandler struct {
-	supplierCh chan FrameFromInterface
+	supplierCh chan FrameIn
 	publishCh  chan<- *ethernet.Frame
 }
 
-func (llh *ARPv4LinkLayerHandler) SupplierC() chan<- FrameFromInterface {
+func (llh *ARPv4LinkLayerHandler) SupplierC() chan<- FrameIn {
 	return llh.supplierCh
 }
 
 func NewARPv4LinkLayerHandler(publishCh chan<- *ethernet.Frame) *ARPv4LinkLayerHandler {
 	return &ARPv4LinkLayerHandler{
-		supplierCh: make(chan FrameFromInterface, 128),
+		supplierCh: make(chan FrameIn, 128),
 		publishCh:  publishCh,
 	}
 }
@@ -44,12 +44,12 @@ func (llh *ARPv4LinkLayerHandler) runHandler(ctx context.Context) {
 			}
 
 			if packet.IsArpResponse() {
-				f.InInterface.ArpTable.Store(packet.SrcProtoAddr, packet.SrcHardwareAddr)
+				f.Interface.ArpTable.Store(packet.SrcProtoAddr, packet.SrcHardwareAddr)
 				continue
 			}
 
-			if packet.IsArpRequestForConfig(f.InInterface) {
-				arpResponse := packet.BuildARPResponseWithConfig(f.InInterface)
+			if packet.IsArpRequestForConfig(f.Interface) {
+				arpResponse := packet.BuildARPResponseWithConfig(f.Interface)
 
 				arpBinary, err := arpResponse.MarshalBinary()
 				if err != nil {
@@ -58,7 +58,7 @@ func (llh *ARPv4LinkLayerHandler) runHandler(ctx context.Context) {
 
 				llh.publishCh <- &ethernet.Frame{
 					Destination: f.Frame.Source,
-					Source:      *f.InInterface.HardwareAddr,
+					Source:      *f.Interface.HardwareAddr,
 					EtherType:   ethernet.EtherTypeARP,
 					Payload:     arpBinary,
 				}

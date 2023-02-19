@@ -9,9 +9,9 @@ import (
 )
 
 type LinkLayerListener struct {
-	interfaces    []*InterfaceConfig
-	strategy      *LinkLayerStrategy
-	fromHandlerCh chan *ethernet.Frame
+	interfaces         []*InterfaceConfig
+	strategy           *LinkLayerStrategy
+	toInterfaceChannel chan *ethernet.Frame
 }
 
 func NewLinkLayerListener(interfaces ...*InterfaceConfig) *LinkLayerListener {
@@ -38,32 +38,33 @@ func NewLinkLayerListener(interfaces ...*InterfaceConfig) *LinkLayerListener {
 		NextHop:      &net.IP{192, 168, 0, 1},
 	})
 
-	fromHandlerCh := make(chan *ethernet.Frame, 128)
+	toInterfaceCh := make(chan *ethernet.Frame, 128)
 
-	arpHandler := NewARPv4LinkLayerHandler(fromHandlerCh)
+	arpHandler := NewARPv4LinkLayerHandler(toInterfaceCh)
 	arpHandler.RunHandler(context.TODO()) // TODO do not run in ctor
 
-	ipv4Handler := NewIPv4LinkLayerHandler(fromHandlerCh, NewInternetLayerHandler(NewInternetLayerStrategy(&IcmpHandler{}), routeTable))
-	ipv4Handler.RunHandler(context.TODO()) // TODO do not run in ctor
+	ipv4OutputHandler := NewIPv4LinkLayerOutputHandler(toInterfaceCh)
+	ipv4OutputHandler.RunHandler(context.TODO()) // TODO do not run in ctor
+
+	internetLayerHandler := NewInternetLayerHandler(ipv4OutputHandler.SupplierC(), NewInternetLayerStrategy(&IcmpHandler{}), routeTable)
+	internetLayerHandler.RunHandler(context.TODO()) // TODO do not run in ctor
+
+	ipv4InputHandler := NewIPv4LinkLayerInputHandler(internetLayerHandler.SupplierC())
+	ipv4InputHandler.RunHandler(context.TODO()) // TODO do not run in ctor
 
 	return &LinkLayerListener{
-		interfaces:    interfaces,
-		fromHandlerCh: fromHandlerCh,
+		interfaces:         interfaces,
+		toInterfaceChannel: toInterfaceCh,
 		strategy: NewLinkLayerStrategy(map[ethernet.EtherType]LinkLayerHandler{
 			ethernet.EtherTypeARP:  arpHandler,
-			ethernet.EtherTypeIPv4: ipv4Handler,
+			ethernet.EtherTypeIPv4: ipv4InputHandler,
 		}),
 	}
 }
 
-type FrameFromInterface struct {
-	Frame       *ethernet.Frame
-	InInterface *InterfaceConfig
-}
-
 func (listener *LinkLayerListener) ListenAndServe(ctx context.Context) {
 
-	fromInterfaceCh := make(chan FrameFromInterface)
+	fromInterfaceCh := make(chan FrameIn)
 	supportedEtherTypes := listener.strategy.GetSupportedEtherTypes()
 
 	for _, iface := range listener.interfaces {
@@ -85,7 +86,7 @@ func (listener *LinkLayerListener) ListenAndServe(ctx context.Context) {
 			if err == ErrDropPdu || err != nil {
 				continue
 			}
-		case frame := <-listener.fromHandlerCh:
+		case frame := <-listener.toInterfaceChannel:
 			var err error
 
 			for _, iface := range listener.interfaces {

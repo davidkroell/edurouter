@@ -5,29 +5,37 @@ import (
 	"github.com/mdlayher/ethernet"
 )
 
-type IPv4LinkLayerHandler struct {
-	supplierCh           chan FrameFromInterface
-	publishCh            chan<- *ethernet.Frame
-	internetLayerHandler *Internetv4LayerHandler
+type IPv4LinkLayerInputHandler struct {
+	supplierCh chan FrameIn
+	publishCh  chan<- *InternetV4PacketIn
 }
 
-func (llh *IPv4LinkLayerHandler) SupplierC() chan<- FrameFromInterface {
+type FrameIn struct {
+	Frame     *ethernet.Frame
+	Interface *InterfaceConfig
+}
+
+type FrameOut struct {
+	Frame     *IPv4Pdu
+	RouteInfo *RouteInfo
+}
+
+func (llh *IPv4LinkLayerInputHandler) SupplierC() chan<- FrameIn {
 	return llh.supplierCh
 }
 
-func NewIPv4LinkLayerHandler(publishCh chan<- *ethernet.Frame, internetLayerHandler *Internetv4LayerHandler) *IPv4LinkLayerHandler {
-	return &IPv4LinkLayerHandler{
-		supplierCh:           make(chan FrameFromInterface, 128),
-		publishCh:            publishCh,
-		internetLayerHandler: internetLayerHandler,
+func NewIPv4LinkLayerInputHandler(publishCh chan<- *InternetV4PacketIn) *IPv4LinkLayerInputHandler {
+	return &IPv4LinkLayerInputHandler{
+		supplierCh: make(chan FrameIn, 128),
+		publishCh:  publishCh,
 	}
 }
 
-func (llh *IPv4LinkLayerHandler) RunHandler(ctx context.Context) {
+func (llh *IPv4LinkLayerInputHandler) RunHandler(ctx context.Context) {
 	go llh.runHandler(ctx)
 }
 
-func (llh *IPv4LinkLayerHandler) runHandler(ctx context.Context) {
+func (llh *IPv4LinkLayerInputHandler) runHandler(ctx context.Context) {
 	for {
 		select {
 		case <-ctx.Done():
@@ -42,31 +50,61 @@ func (llh *IPv4LinkLayerHandler) runHandler(ctx context.Context) {
 			}
 
 			// TODO handle error
-			f.InInterface.ArpTable.Store(ipv4Packet.SrcIP, f.Frame.Source)
+			f.Interface.ArpTable.Store(ipv4Packet.SrcIP, f.Frame.Source)
 
-			result, routeInfo, err := llh.internetLayerHandler.Handle(&ipv4Packet, f.InInterface)
-			if err != nil {
-				continue
+			llh.publishCh <- &InternetV4PacketIn{
+				Packet:   &ipv4Packet,
+				Ifconfig: f.Interface,
 			}
+		}
+	}
+}
 
-			framePayload, err := result.MarshalBinary()
+type IPv4LinkLayerOutputHandler struct {
+	supplierCh chan *InternetV4PacketOut
+	publishCh  chan<- *ethernet.Frame
+}
+
+func (h *IPv4LinkLayerOutputHandler) SupplierC() chan *InternetV4PacketOut {
+	return h.supplierCh
+}
+
+func NewIPv4LinkLayerOutputHandler(publishCh chan<- *ethernet.Frame) *IPv4LinkLayerOutputHandler {
+	return &IPv4LinkLayerOutputHandler{
+		supplierCh: make(chan *InternetV4PacketOut, 128),
+		publishCh:  publishCh,
+	}
+}
+
+func (h *IPv4LinkLayerOutputHandler) RunHandler(ctx context.Context) {
+	go h.runHandler(ctx)
+}
+
+func (h *IPv4LinkLayerOutputHandler) runHandler(ctx context.Context) {
+	for {
+		select {
+		case <-ctx.Done():
+			return
+
+		case pdu := <-h.supplierCh:
+			framePayload, err := pdu.Packet.MarshalBinary()
 			if err != nil {
 				continue
 			}
 
 			outFrame := &ethernet.Frame{
-				Source:    *routeInfo.OutInterface.HardwareAddr,
-				EtherType: f.Frame.EtherType,
+				Source:    *pdu.RouteInfo.OutInterface.HardwareAddr,
+				EtherType: ethernet.EtherTypeIPv4,
 				Payload:   framePayload,
 			}
 
-			if routeInfo.RouteType == LinkLocalRouteType {
-				outFrame.Destination, err = routeInfo.OutInterface.ArpTable.Resolve(result.DstIP)
+			if pdu.RouteInfo.RouteType == LinkLocalRouteType {
+				outFrame.Destination, err = pdu.RouteInfo.OutInterface.ArpTable.Resolve(pdu.Packet.DstIP)
 			} else {
-				outFrame.Destination, err = routeInfo.OutInterface.ArpTable.Resolve(*routeInfo.NextHop)
+				outFrame.Destination, err = pdu.RouteInfo.OutInterface.ArpTable.Resolve(*pdu.RouteInfo.NextHop)
 			}
 
-			llh.publishCh <- outFrame
+			h.publishCh <- outFrame
 		}
 	}
 }
