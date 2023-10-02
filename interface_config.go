@@ -7,6 +7,7 @@ import (
 	"log"
 	"net"
 	"strings"
+	"time"
 )
 
 const (
@@ -97,14 +98,20 @@ func (i *InterfaceConfig) SetupAndListen(ctx context.Context, supportedEtherType
 }
 
 func (i *InterfaceConfig) readFramesFromConn(ctx context.Context, mtu int, conn net.PacketConn, outChan chan<- FrameIn) {
-	// TODO implement context close -> close conn
-
 	// Accept frames up to interface's MTU in size
 	b := make([]byte, mtu)
 	var f ethernet.Frame
 
 	// Keep reading frames
 	for {
+		select {
+		case <-ctx.Done():
+			_ = conn.Close()
+			return
+		case <-time.After(time.Nanosecond):
+			// fall-through
+		}
+
 		n, _, err := conn.ReadFrom(b)
 		if err != nil {
 			// TODO fix printing
