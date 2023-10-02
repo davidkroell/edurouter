@@ -8,17 +8,22 @@ import (
 	"net"
 )
 
+type handler interface {
+	RunHandler(ctx context.Context)
+}
+
 type LinkLayerListener struct {
 	interfaces         []*InterfaceConfig
 	strategy           *LinkLayerStrategy
 	toInterfaceChannel chan *ethernet.Frame
+	handlers           []handler
 }
 
 func NewLinkLayerListener(interfaces ...*InterfaceConfig) *LinkLayerListener {
 	routeTable := NewRouteTable()
 
 	for _, i := range interfaces {
-		routeTable.AddRoute(RouteInfo{
+		routeTable.MustAddRoute(RouteInfo{
 			RouteType: LinkLocalRouteType,
 			DstNet: net.IPNet{
 				IP:   i.Addr.IP.Mask(i.Addr.Mask),
@@ -28,7 +33,8 @@ func NewLinkLayerListener(interfaces ...*InterfaceConfig) *LinkLayerListener {
 		})
 	}
 
-	routeTable.AddRoute(RouteInfo{
+	// Default gateway
+	routeTable.MustAddRoute(RouteInfo{
 		RouteType: StaticRouteType,
 		DstNet: net.IPNet{
 			IP:   net.IP{0, 0, 0, 0},
@@ -41,16 +47,12 @@ func NewLinkLayerListener(interfaces ...*InterfaceConfig) *LinkLayerListener {
 	toInterfaceCh := make(chan *ethernet.Frame, 128)
 
 	arpHandler := NewARPv4LinkLayerHandler(toInterfaceCh)
-	arpHandler.RunHandler(context.TODO()) // TODO do not run in ctor
 
 	ipv4OutputHandler := NewIPv4LinkLayerOutputHandler(toInterfaceCh)
-	ipv4OutputHandler.RunHandler(context.TODO()) // TODO do not run in ctor
 
 	internetLayerHandler := NewInternetLayerHandler(ipv4OutputHandler.SupplierC(), NewInternetLayerStrategy(&IcmpHandler{}), routeTable)
-	internetLayerHandler.RunHandler(context.TODO()) // TODO do not run in ctor
 
 	ipv4InputHandler := NewIPv4LinkLayerInputHandler(internetLayerHandler.SupplierC())
-	ipv4InputHandler.RunHandler(context.TODO()) // TODO do not run in ctor
 
 	return &LinkLayerListener{
 		interfaces:         interfaces,
@@ -59,6 +61,12 @@ func NewLinkLayerListener(interfaces ...*InterfaceConfig) *LinkLayerListener {
 			ethernet.EtherTypeARP:  arpHandler,
 			ethernet.EtherTypeIPv4: ipv4InputHandler,
 		}),
+		handlers: []handler{
+			arpHandler,
+			ipv4OutputHandler,
+			internetLayerHandler,
+			ipv4InputHandler,
+		},
 	}
 }
 
@@ -66,6 +74,10 @@ func (listener *LinkLayerListener) ListenAndServe(ctx context.Context) {
 
 	fromInterfaceCh := make(chan FrameIn)
 	supportedEtherTypes := listener.strategy.GetSupportedEtherTypes()
+
+	for _, h := range listener.handlers {
+		h.RunHandler(ctx)
+	}
 
 	for _, iface := range listener.interfaces {
 		iface.SetupAndListen(ctx, supportedEtherTypes, fromInterfaceCh)
