@@ -138,8 +138,8 @@ func (table *RouteTable) getRouteInfoForPacket(ip *IPv4Pdu) (*RouteInfo, error) 
 	return nil, ErrNoRoute
 }
 
-func (table *RouteTable) RoutePacket(ip *IPv4Pdu) (*IPv4Pdu, *RouteInfo, error) {
-	ri, err := table.getRouteInfoForPacket(ip)
+func (table *RouteTable) RoutePacket(ip IPv4Pdu) (*IPv4Pdu, *RouteInfo, error) {
+	ri, err := table.getRouteInfoForPacket(&ip)
 
 	if err != nil {
 		return nil, nil, err
@@ -152,5 +152,5 @@ func (table *RouteTable) RoutePacket(ip *IPv4Pdu) (*IPv4Pdu, *RouteInfo, error) 
 		return nil, nil, ErrDropPdu
 	}
 
-	return ip, ri, nil
+	return &ip, ri, nil
 }

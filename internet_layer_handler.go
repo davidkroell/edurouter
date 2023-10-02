@@ -11,8 +11,9 @@ type InternetLayerHandler interface {
 }
 
 type Internetv4LayerHandler struct {
-	supplierCh chan *InternetV4PacketIn
-	publishCh  chan<- *InternetV4PacketOut
+	supplierCh      chan *InternetV4PacketIn
+	supplierLocalCh chan *IPv4Pdu
+	publishCh       chan<- *InternetV4PacketOut
 
 	internetLayerStrategy InternetLayerStrategy
 	routeTable            *RouteTable
@@ -20,6 +21,10 @@ type Internetv4LayerHandler struct {
 
 func (h *Internetv4LayerHandler) SupplierC() chan *InternetV4PacketIn {
 	return h.supplierCh
+}
+
+func (h *Internetv4LayerHandler) SupplierLocalC() chan *IPv4Pdu {
+	return h.supplierLocalCh
 }
 
 type InternetV4PacketIn struct {
@@ -32,13 +37,17 @@ type InternetV4PacketOut struct {
 	RouteInfo *RouteInfo
 }
 
-func NewInternetLayerHandler(publishCh chan<- *InternetV4PacketOut, internetLayerStrategy InternetLayerStrategy, routeTable *RouteTable) *Internetv4LayerHandler {
+func NewInternetLayerHandler(publishCh chan<- *InternetV4PacketOut, routeTable *RouteTable) *Internetv4LayerHandler {
 	return &Internetv4LayerHandler{
-		supplierCh:            make(chan *InternetV4PacketIn, 128),
-		publishCh:             publishCh,
-		internetLayerStrategy: internetLayerStrategy,
-		routeTable:            routeTable,
+		supplierCh:      make(chan *InternetV4PacketIn, 128),
+		supplierLocalCh: make(chan *IPv4Pdu, 128),
+		publishCh:       publishCh,
+		routeTable:      routeTable,
 	}
+}
+
+func (h *Internetv4LayerHandler) SetStrategy(s InternetLayerStrategy) {
+	h.internetLayerStrategy = s
 }
 
 func (h *Internetv4LayerHandler) RunHandler(ctx context.Context) {
@@ -51,7 +60,35 @@ func (h *Internetv4LayerHandler) runHandler(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case inPkg := <-h.supplierCh:
-			outPdu, routeInfo, err := h.handlePacket(inPkg.Packet, inPkg.Ifconfig)
+			if bytes.Equal(inPkg.Packet.DstIP, inPkg.Ifconfig.RealIPAddr.IP) {
+				// this packet is for the real interface, not for the simulated one
+				continue
+			}
+
+			if bytes.Equal(inPkg.Packet.DstIP, inPkg.Ifconfig.Addr.IP) {
+				// this packet has to be handled at the simulated IP address
+				err := h.handleLocal(inPkg.Packet)
+				// TODO error handling
+				if err != nil {
+
+				}
+				continue
+			}
+
+			outPdu, routeInfo, err := h.routeTable.RoutePacket(*inPkg.Packet)
+
+			if err != nil {
+				// TODO error handling
+				continue
+			}
+
+			h.publishCh <- &InternetV4PacketOut{
+				Packet:    outPdu,
+				RouteInfo: routeInfo,
+			}
+
+		case inPkg := <-h.supplierLocalCh:
+			outPdu, routeInfo, err := h.routeTable.RoutePacket(*inPkg)
 
 			if err != nil {
 				// TODO
@@ -66,41 +103,13 @@ func (h *Internetv4LayerHandler) runHandler(ctx context.Context) {
 	}
 }
 
-func (h *Internetv4LayerHandler) handlePacket(packet *IPv4Pdu, ifconfig *InterfaceConfig) (*IPv4Pdu, *RouteInfo, error) {
-	if bytes.Equal(packet.DstIP, ifconfig.RealIPAddr.IP) {
-		// this packet is for the real interface, not for the simulated one
-		return nil, nil, ErrDropPdu
-	}
-
-	if bytes.Equal(packet.DstIP, ifconfig.Addr.IP) {
-		// this packet has to be handled at the simulated IP address
-		packet, err := h.handleLocal(packet)
-		if err != nil {
-			return nil, nil, err
-		}
-
-		ri, err := h.routeTable.getRouteInfoForPacket(packet)
-		if err != nil {
-			return nil, nil, err
-		}
-
-		return packet, ri, err
-	}
-
-	return h.routeTable.RoutePacket(packet)
-}
-
-func (h *Internetv4LayerHandler) handleLocal(packet *IPv4Pdu) (*IPv4Pdu, error) {
+func (h *Internetv4LayerHandler) handleLocal(packet *IPv4Pdu) error {
 	nextHandler, err := h.internetLayerStrategy.GetHandler(packet.Protocol)
 	if err != nil {
-		return nil, ErrDropPdu
+		return err
 	}
 
-	resultPacket, err := nextHandler.Handle(packet)
-
-	if err != nil {
-		return nil, ErrDropPdu
-	}
-
-	return resultPacket, nil
+	ch := nextHandler.SupplierC()
+	ch <- packet
+	return nil
 }

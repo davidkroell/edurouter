@@ -50,7 +50,11 @@ func NewLinkLayerListener(interfaces ...*InterfaceConfig) *LinkLayerListener {
 
 	ipv4OutputHandler := NewIPv4LinkLayerOutputHandler(toInterfaceCh)
 
-	internetLayerHandler := NewInternetLayerHandler(ipv4OutputHandler.SupplierC(), NewInternetLayerStrategy(&IcmpHandler{}), routeTable)
+	internetLayerHandler := NewInternetLayerHandler(ipv4OutputHandler.SupplierC(), routeTable)
+
+	icmp := NewIcmpHandler(internetLayerHandler.SupplierLocalC())
+	internetLayerStrategy := NewInternetLayerStrategy(icmp)
+	internetLayerHandler.SetStrategy(internetLayerStrategy)
 
 	ipv4InputHandler := NewIPv4LinkLayerInputHandler(internetLayerHandler.SupplierC())
 
@@ -66,6 +70,7 @@ func NewLinkLayerListener(interfaces ...*InterfaceConfig) *LinkLayerListener {
 			ipv4OutputHandler,
 			internetLayerHandler,
 			ipv4InputHandler,
+			icmp,
 		},
 	}
 }
