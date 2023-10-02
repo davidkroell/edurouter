@@ -3,6 +3,7 @@ package edurouter
 import (
 	"context"
 	"github.com/mdlayher/ethernet"
+	"log"
 )
 
 type ARPv4LinkLayerHandler struct {
@@ -36,6 +37,7 @@ func (llh *ARPv4LinkLayerHandler) runHandler(ctx context.Context) {
 			// ARP logic
 			err := (&packet).UnmarshalBinary(f.Frame.Payload)
 			if err != nil {
+				log.Printf("error during arp unmarshall: %v\n", err)
 				continue
 			}
 
@@ -44,7 +46,10 @@ func (llh *ARPv4LinkLayerHandler) runHandler(ctx context.Context) {
 			}
 
 			if packet.IsArpResponse() {
-				f.Interface.ArpTable.Store(packet.SrcProtoAddr, packet.SrcHardwareAddr)
+				err = f.Interface.ArpTable.Store(packet.SrcProtoAddr, packet.SrcHardwareAddr)
+				if err != nil {
+					log.Printf("error during arp arp table store: %v\n", err)
+				}
 				continue
 			}
 

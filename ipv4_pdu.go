@@ -41,7 +41,6 @@ func NewIPv4Pdu(srcIp, dstIp net.IP, ipProto IPProtocol, payload []byte) *IPv4Pd
 	return &IPv4Pdu{
 		Version:     DefaultIPv4Version,
 		TotalLength: IPv4HeaderLength + uint16(len(payload)),
-		TTL:         DefaultIPv4TTL,
 		Protocol:    ipProto,
 		SrcIP:       srcIp,
 		DstIP:       dstIp,

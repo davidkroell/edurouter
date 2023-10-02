@@ -114,14 +114,12 @@ func (i *InterfaceConfig) readFramesFromConn(ctx context.Context, mtu int, conn 
 
 		n, _, err := conn.ReadFrom(b)
 		if err != nil {
-			// TODO fix printing
 			log.Printf("failed to receive message: %v\n", err)
 			continue
 		}
 
 		// Unpack Ethernet frame into Go representation.
 		if err := (&f).UnmarshalBinary(b[:n]); err != nil {
-			// todo fix printing
 			log.Printf("failed to unmarshal ethernet frame: %v\n", err)
 			continue
 		}

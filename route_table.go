@@ -145,7 +145,14 @@ func (table *RouteTable) RoutePacket(ip IPv4Pdu) (*IPv4Pdu, *RouteInfo, error) {
 		return nil, nil, err
 	}
 
-	ip.TTL--
+	if ip.SrcIP == nil {
+		// local originating traffic
+
+		ip.SrcIP = ri.OutInterface.Addr.IP
+		ip.TTL = DefaultIPv4TTL
+	} else {
+		ip.TTL--
+	}
 
 	if ip.TTL == 0 {
 		// time to live ended, dropping

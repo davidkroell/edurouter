@@ -2,6 +2,10 @@ package edurouter
 
 import (
 	"context"
+	"crypto/rand"
+	"log"
+	"net"
+	"time"
 )
 
 type IcmpHandler struct {
@@ -13,6 +17,30 @@ func NewIcmpHandler(publishCh chan<- *IPv4Pdu) *IcmpHandler {
 	return &IcmpHandler{
 		supplierCh: make(chan *IPv4Pdu, 128),
 		publishCh:  publishCh,
+	}
+}
+
+func (i *IcmpHandler) Ping(dstIP net.IP, numPings uint16) {
+	dstIP = dstIP.To4()
+
+	for seq := uint16(1); seq <= numPings; seq++ {
+		icmpPacket := ICMPPacket{
+			IcmpType: IcmpTypeEchoRequest,
+			Id:       200 + seq,
+			Seq:      seq,
+			Data:     make([]byte, 48, 48),
+		}
+
+		_, _ = rand.Read(icmpPacket.Data)
+
+		// never returns an error
+		icmpBinary, _ := icmpPacket.MarshalBinary()
+
+		ipPdu := NewIPv4Pdu(nil, dstIP, IPProtocolICMPv4, icmpBinary)
+
+		i.publishCh <- ipPdu
+
+		time.Sleep(time.Second)
 	}
 }
 
@@ -32,8 +60,11 @@ func (i *IcmpHandler) runHandler(ctx context.Context) {
 		case inPkg := <-i.supplierCh:
 			outPdu, err := i.handle(inPkg)
 
+			if err == ErrDropPdu {
+				continue
+			}
 			if err != nil {
-				// TODO error handling
+				log.Printf("error during icmp handling: %v\n", err)
 				continue
 			}
 
@@ -58,6 +89,9 @@ func (i *IcmpHandler) handle(packet *IPv4Pdu) (*IPv4Pdu, error) {
 		icmpBinary, _ := icmpPacket.MarshalBinary()
 
 		return NewIPv4Pdu(packet.DstIP, packet.SrcIP, IPProtocolICMPv4, icmpBinary), nil
+	}
+	if icmpPacket.IcmpType == IcmpTypeEchoReply {
+		log.Printf("64 bytes from %s: icmp_seq=%d, ttl=%d\n", packet.SrcIP.String(), icmpPacket.Seq, packet.TTL)
 	}
 
 	return nil, ErrDropPdu

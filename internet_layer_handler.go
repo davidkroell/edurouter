@@ -3,6 +3,7 @@ package edurouter
 import (
 	"bytes"
 	"context"
+	"log"
 )
 
 type InternetLayerHandler interface {
@@ -68,17 +69,16 @@ func (h *Internetv4LayerHandler) runHandler(ctx context.Context) {
 			if bytes.Equal(inPkg.Packet.DstIP, inPkg.Ifconfig.Addr.IP) {
 				// this packet has to be handled at the simulated IP address
 				err := h.handleLocal(inPkg.Packet)
-				// TODO error handling
 				if err != nil {
-
+					log.Printf("error during handleLocal: %v\n", err)
 				}
 				continue
 			}
 
 			outPdu, routeInfo, err := h.routeTable.RoutePacket(*inPkg.Packet)
 
-			if err != nil {
-				// TODO error handling
+			if err != nil && err != ErrDropPdu {
+				log.Printf("error during packet routing: %v\n", err)
 				continue
 			}
 
@@ -90,8 +90,8 @@ func (h *Internetv4LayerHandler) runHandler(ctx context.Context) {
 		case inPkg := <-h.supplierLocalCh:
 			outPdu, routeInfo, err := h.routeTable.RoutePacket(*inPkg)
 
-			if err != nil {
-				// TODO
+			if err != nil && err != ErrDropPdu {
+				log.Printf("error during packet routing: %v\n", err)
 				continue
 			}
 

@@ -6,6 +6,7 @@ import (
 	"github.com/mdlayher/ethernet"
 	"log"
 	"net"
+	"time"
 )
 
 type handler interface {
@@ -58,6 +59,11 @@ func NewLinkLayerListener(interfaces ...*InterfaceConfig) *LinkLayerListener {
 
 	ipv4InputHandler := NewIPv4LinkLayerInputHandler(internetLayerHandler.SupplierC())
 
+	go func() {
+		time.Sleep(time.Second)
+		// icmp.Ping(net.ParseIP("192.168.0.184"), 4)
+	}()
+
 	return &LinkLayerListener{
 		interfaces:         interfaces,
 		toInterfaceChannel: toInterfaceCh,
@@ -66,11 +72,15 @@ func NewLinkLayerListener(interfaces ...*InterfaceConfig) *LinkLayerListener {
 			ethernet.EtherTypeIPv4: ipv4InputHandler,
 		}),
 		handlers: []handler{
-			arpHandler,
-			ipv4OutputHandler,
-			internetLayerHandler,
-			ipv4InputHandler,
+			// reverse order
 			icmp,
+
+			internetLayerHandler,
+
+			ipv4OutputHandler,
+			ipv4InputHandler,
+
+			arpHandler,
 		},
 	}
 }
@@ -96,6 +106,7 @@ func (listener *LinkLayerListener) ListenAndServe(ctx context.Context) {
 		case f := <-fromInterfaceCh:
 			handler, err := listener.strategy.GetHandler(f.Frame.EtherType)
 			if err != nil {
+				log.Printf("error during strategy GetHandler: %v\n", err)
 				continue
 			}
 
@@ -114,7 +125,7 @@ func (listener *LinkLayerListener) ListenAndServe(ctx context.Context) {
 			}
 
 			if err != nil {
-				log.Printf("failed to write ethernet frame: %v\n", err)
+				log.Printf("error writing ethernet frame: %v\n", err)
 				continue
 			}
 		}
