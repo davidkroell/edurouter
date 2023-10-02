@@ -2,6 +2,7 @@ package edurouter
 
 import (
 	"bytes"
+	"encoding/binary"
 	"net"
 	"sort"
 	"sync"
@@ -90,7 +91,13 @@ func (table *RouteTable) AddRoute(config RouteInfo) error {
 
 	// sort slice by most exact match
 	sort.SliceStable(table.configuredRoutes, func(i, j int) bool {
-		return table.configuredRoutes[i].RouteType < table.configuredRoutes[j].RouteType // ascending by route type (pseudo-metric)
+		netMaskIPi := binary.BigEndian.Uint32(table.configuredRoutes[i].DstNet.Mask)
+		netMaskIPj := binary.BigEndian.Uint32(table.configuredRoutes[j].DstNet.Mask)
+
+		return table.configuredRoutes[i].RouteType < table.configuredRoutes[j].RouteType || // ascending by route type (pseudo-metric)
+			// inverse netMask meaning more exact match
+			// a /16 is more important than a /8
+			(netMaskIPi > netMaskIPj)
 	})
 	return nil
 }
