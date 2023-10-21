@@ -3,7 +3,7 @@ package edurouter
 import (
 	"context"
 	"crypto/rand"
-	"log"
+	"github.com/rs/zerolog/log"
 	"net"
 	"time"
 )
@@ -64,7 +64,7 @@ func (i *IcmpHandler) runHandler(ctx context.Context) {
 				continue
 			}
 			if err != nil {
-				log.Printf("error during icmp handling: %v\n", err)
+				log.Error().Msgf("error during icmp handling: %v\n", err)
 				continue
 			}
 
@@ -91,7 +91,7 @@ func (i *IcmpHandler) handle(packet *IPv4Pdu) (*IPv4Pdu, error) {
 		return NewIPv4Pdu(packet.DstIP, packet.SrcIP, IPProtocolICMPv4, icmpBinary), nil
 	}
 	if icmpPacket.IcmpType == IcmpTypeEchoReply {
-		log.Printf("64 bytes from %s: icmp_seq=%d, ttl=%d\n", packet.SrcIP.String(), icmpPacket.Seq, packet.TTL)
+		log.Fatal().Msgf("64 bytes from %s: icmp_seq=%d, ttl=%d\n", packet.SrcIP.String(), icmpPacket.Seq, packet.TTL)
 	}
 
 	return nil, ErrDropPdu

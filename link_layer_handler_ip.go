@@ -3,7 +3,7 @@ package edurouter
 import (
 	"context"
 	"github.com/mdlayher/ethernet"
-	"log"
+	"github.com/rs/zerolog/log"
 )
 
 type IPv4LinkLayerInputHandler struct {
@@ -47,13 +47,13 @@ func (llh *IPv4LinkLayerInputHandler) runHandler(ctx context.Context) {
 
 			err := (&ipv4Packet).UnmarshalBinary(f.Frame.Payload)
 			if err != nil {
-				log.Printf("error during arp unmarshall: %v\n", err)
+				log.Error().Msgf("error during arp unmarshall: %v\n", err)
 				continue
 			}
 
 			err = f.Interface.ArpTable.Store(ipv4Packet.SrcIP, f.Frame.Source)
 			if err != nil {
-				log.Printf("error during arp table store: %v\n", err)
+				log.Error().Msgf("error during arp table store: %v\n", err)
 			}
 
 			llh.publishCh <- &InternetV4PacketIn{
@@ -93,7 +93,7 @@ func (h *IPv4LinkLayerOutputHandler) runHandler(ctx context.Context) {
 		case pdu := <-h.supplierCh:
 			framePayload, err := pdu.Packet.MarshalBinary()
 			if err != nil {
-				log.Printf("error during ipv4 marshall: %v\n", err)
+				log.Error().Msgf("error during ipv4 marshall: %v\n", err)
 				continue
 			}
 

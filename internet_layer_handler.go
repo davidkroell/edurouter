@@ -3,7 +3,7 @@ package edurouter
 import (
 	"bytes"
 	"context"
-	"log"
+	"github.com/rs/zerolog/log"
 )
 
 type InternetLayerHandler interface {
@@ -70,7 +70,7 @@ func (h *Internetv4LayerHandler) runHandler(ctx context.Context) {
 				// this packet has to be handled at the simulated IP address
 				err := h.handleLocal(inPkg.Packet)
 				if err != nil {
-					log.Printf("error during handleLocal: %v\n", err)
+					log.Error().Msgf("error during handleLocal: %v\n", err)
 				}
 				continue
 			}
@@ -78,7 +78,7 @@ func (h *Internetv4LayerHandler) runHandler(ctx context.Context) {
 			outPdu, routeInfo, err := h.routeTable.RoutePacket(*inPkg.Packet)
 
 			if err != nil && err != ErrDropPdu {
-				log.Printf("error during packet routing: %v\n", err)
+				log.Error().Msgf("error during packet routing: %v\n", err)
 				continue
 			}
 
@@ -91,7 +91,7 @@ func (h *Internetv4LayerHandler) runHandler(ctx context.Context) {
 			outPdu, routeInfo, err := h.routeTable.RoutePacket(*inPkg)
 
 			if err != nil && err != ErrDropPdu {
-				log.Printf("error during packet routing: %v\n", err)
+				log.Error().Msgf("error during packet routing: %v\n", err)
 				continue
 			}
 

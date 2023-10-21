@@ -4,7 +4,7 @@ import (
 	"context"
 	"github.com/mdlayher/ethernet"
 	"github.com/mdlayher/raw"
-	"log"
+	"github.com/rs/zerolog/log"
 	"net"
 	"strings"
 	"time"
@@ -63,7 +63,7 @@ func (i *InterfaceConfig) SetupAndListen(ctx context.Context, supportedEtherType
 	// Select the interface to use for Ethernet traffic
 	ifi, err := net.InterfaceByName(i.InterfaceName)
 	if err != nil {
-		log.Fatalf("failed to open interface: %v", err)
+		log.Error().Msgf("failed to open interface: %v", err)
 	}
 
 	// map real hardware and IP addresses
@@ -84,7 +84,7 @@ func (i *InterfaceConfig) SetupAndListen(ctx context.Context, supportedEtherType
 	for _, etherType := range supportedEtherTypes {
 		conn, err := raw.ListenPacket(ifi, uint16(etherType), nil)
 		if err != nil {
-			log.Fatalf("failed to listen: %v", err)
+			log.Error().Msgf("failed to listen: %v", err)
 		}
 
 		if etherType == ethernet.EtherTypeARP {
@@ -114,13 +114,13 @@ func (i *InterfaceConfig) readFramesFromConn(ctx context.Context, mtu int, conn 
 
 		n, _, err := conn.ReadFrom(b)
 		if err != nil {
-			log.Printf("failed to receive message: %v\n", err)
+			log.Error().Msgf("failed to receive message: %v\n", err)
 			continue
 		}
 
 		// Unpack Ethernet frame into Go representation.
 		if err := (&f).UnmarshalBinary(b[:n]); err != nil {
-			log.Printf("failed to unmarshal ethernet frame: %v\n", err)
+			log.Error().Msgf("failed to unmarshal ethernet frame: %v\n", err)
 			continue
 		}
 

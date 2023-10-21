@@ -2,6 +2,8 @@ package main
 
 import (
 	"github.com/davidkroell/edurouter"
+	"github.com/rs/zerolog"
+	"github.com/rs/zerolog/log"
 	"os"
 
 	"github.com/spf13/cobra"
@@ -39,6 +41,8 @@ Version: ` + edurouter.Version(),
 				}
 				interfaceConfigs[i] = config
 			}
+
+			log.Logger = log.Output(zerolog.NewConsoleWriter())
 
 			listener := edurouter.NewLinkLayerListener(interfaceConfigs...)
 

@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"context"
 	"github.com/mdlayher/ethernet"
-	"log"
+	"github.com/rs/zerolog/log"
 	"net"
 	"time"
 )
@@ -106,7 +106,7 @@ func (listener *LinkLayerListener) ListenAndServe(ctx context.Context) {
 		case f := <-fromInterfaceCh:
 			handler, err := listener.strategy.GetHandler(f.Frame.EtherType)
 			if err != nil {
-				log.Printf("error during strategy GetHandler: %v\n", err)
+				log.Error().Msgf("error during strategy GetHandler: %v\n", err)
 				continue
 			}
 
@@ -125,7 +125,7 @@ func (listener *LinkLayerListener) ListenAndServe(ctx context.Context) {
 			}
 
 			if err != nil {
-				log.Printf("error writing ethernet frame: %v\n", err)
+				log.Error().Msgf("error writing ethernet frame: %v\n", err)
 				continue
 			}
 		}
