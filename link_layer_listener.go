@@ -6,7 +6,6 @@ import (
 	"github.com/mdlayher/ethernet"
 	"github.com/rs/zerolog/log"
 	"net"
-	"time"
 )
 
 type handler interface {
@@ -18,6 +17,8 @@ type LinkLayerListener struct {
 	strategy           *LinkLayerStrategy
 	toInterfaceChannel chan *ethernet.Frame
 	handlers           []handler
+	routeTable         *RouteTable
+	icmp               *IcmpHandler
 }
 
 func NewLinkLayerListener(interfaces ...*InterfaceConfig) *LinkLayerListener {
@@ -34,17 +35,6 @@ func NewLinkLayerListener(interfaces ...*InterfaceConfig) *LinkLayerListener {
 		})
 	}
 
-	// Default gateway
-	routeTable.MustAddRoute(RouteInfo{
-		RouteType: StaticRouteType,
-		DstNet: net.IPNet{
-			IP:   net.IP{0, 0, 0, 0},
-			Mask: net.CIDRMask(0, 32),
-		},
-		OutInterface: interfaces[0],
-		NextHop:      &net.IP{192, 168, 0, 1},
-	})
-
 	toInterfaceCh := make(chan *ethernet.Frame, 128)
 
 	arpHandler := NewARPv4LinkLayerHandler(toInterfaceCh)
@@ -59,12 +49,9 @@ func NewLinkLayerListener(interfaces ...*InterfaceConfig) *LinkLayerListener {
 
 	ipv4InputHandler := NewIPv4LinkLayerInputHandler(internetLayerHandler.SupplierC())
 
-	go func() {
-		time.Sleep(time.Second)
-		// icmp.Ping(net.ParseIP("192.168.0.184"), 4)
-	}()
-
 	return &LinkLayerListener{
+		routeTable:         routeTable,
+		icmp:               icmp,
 		interfaces:         interfaces,
 		toInterfaceChannel: toInterfaceCh,
 		strategy: NewLinkLayerStrategy(map[ethernet.EtherType]LinkLayerHandler{
@@ -83,6 +70,14 @@ func NewLinkLayerListener(interfaces ...*InterfaceConfig) *LinkLayerListener {
 			arpHandler,
 		},
 	}
+}
+
+func (l *LinkLayerListener) RouteTable() *RouteTable {
+	return l.routeTable
+}
+
+func (l *LinkLayerListener) IcmpPing(ip net.IP, numPings uint16) {
+	l.icmp.Ping(ip, numPings)
 }
 
 func (listener *LinkLayerListener) ListenAndServe(ctx context.Context) {

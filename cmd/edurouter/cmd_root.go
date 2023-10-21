@@ -1,10 +1,13 @@
 package main
 
 import (
+	"context"
 	"github.com/davidkroell/edurouter"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 	"os"
+	"os/signal"
+	"syscall"
 
 	"github.com/spf13/cobra"
 )
@@ -46,7 +49,16 @@ Version: ` + edurouter.Version(),
 
 			listener := edurouter.NewLinkLayerListener(interfaceConfigs...)
 
-			listener.ListenAndServe(cmd.Context())
+			ctx, cancel := context.WithCancel(context.Background())
+
+			go func(ctx context.Context) {
+				listener.ListenAndServe(ctx)
+				log.Info().Msg("edurouter closed")
+				cancel()
+			}(cmd.Context())
+
+			<-ctx.Done()
+
 			return nil
 		},
 	}
@@ -62,7 +74,17 @@ Version: ` + edurouter.Version(),
 // Execute adds all child commands to the root command and sets flags appropriately.
 // This is called by main.main(). It only needs to happen once to the rootCmd.
 func Execute() {
-	err := RootCommand().Execute()
+	ctx, cancel := context.WithCancel(context.Background())
+
+	go func() {
+		ch := make(chan os.Signal, 1)
+		signal.Notify(ch, os.Interrupt, syscall.SIGTERM)
+		<-ch
+		log.Info().Msg("edurouter close requested")
+		cancel()
+	}()
+
+	err := RootCommand().ExecuteContext(ctx)
 	if err != nil {
 		os.Exit(1)
 	}
