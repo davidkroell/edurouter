@@ -19,21 +19,12 @@ type LinkLayerListener struct {
 	handlers           []handler
 	routeTable         *RouteTable
 	icmp               *IcmpHandler
+	fromInterfaceCh    chan FrameIn
+	ctx                context.Context
 }
 
 func NewLinkLayerListener(interfaces ...*InterfaceConfig) *LinkLayerListener {
 	routeTable := NewRouteTable()
-
-	for _, i := range interfaces {
-		routeTable.MustAddRoute(RouteInfo{
-			RouteType: LinkLocalRouteType,
-			DstNet: net.IPNet{
-				IP:   i.Addr.IP.Mask(i.Addr.Mask),
-				Mask: i.Addr.Mask,
-			},
-			OutInterface: i,
-		})
-	}
 
 	toInterfaceCh := make(chan *ethernet.Frame, 128)
 
@@ -80,17 +71,42 @@ func (l *LinkLayerListener) IcmpPing(ip net.IP, numPings uint16) {
 	l.icmp.Ping(ip, numPings)
 }
 
-func (listener *LinkLayerListener) ListenAndServe(ctx context.Context) {
+func (l *LinkLayerListener) AddInterface(iface *InterfaceConfig) {
+	iface.SetupAndListen(l.ctx, l.strategy.GetSupportedEtherTypes(), l.fromInterfaceCh)
 
-	fromInterfaceCh := make(chan FrameIn)
-	supportedEtherTypes := listener.strategy.GetSupportedEtherTypes()
+	l.routeTable.MustAddRoute(RouteInfo{
+		RouteType: LinkLocalRouteType,
+		DstNet: net.IPNet{
+			IP:   iface.Addr.IP.Mask(iface.Addr.Mask),
+			Mask: iface.Addr.Mask,
+		},
+		OutInterface: iface,
+	})
 
-	for _, h := range listener.handlers {
+	l.interfaces = append(l.interfaces, iface)
+}
+
+func (l *LinkLayerListener) ListenAndServe(ctx context.Context) {
+	l.ctx = ctx
+
+	l.fromInterfaceCh = make(chan FrameIn)
+	supportedEtherTypes := l.strategy.GetSupportedEtherTypes()
+
+	for _, h := range l.handlers {
 		h.RunHandler(ctx)
 	}
 
-	for _, iface := range listener.interfaces {
-		iface.SetupAndListen(ctx, supportedEtherTypes, fromInterfaceCh)
+	for _, iface := range l.interfaces {
+		iface.SetupAndListen(ctx, supportedEtherTypes, l.fromInterfaceCh)
+
+		l.routeTable.MustAddRoute(RouteInfo{
+			RouteType: LinkLocalRouteType,
+			DstNet: net.IPNet{
+				IP:   iface.Addr.IP.Mask(iface.Addr.Mask),
+				Mask: iface.Addr.Mask,
+			},
+			OutInterface: iface,
+		})
 	}
 
 	// read frames from supplier channel
@@ -98,10 +114,10 @@ func (listener *LinkLayerListener) ListenAndServe(ctx context.Context) {
 		select {
 		case <-ctx.Done():
 			return
-		case f := <-fromInterfaceCh:
-			handler, err := listener.strategy.GetHandler(f.Frame.EtherType)
+		case f := <-l.fromInterfaceCh:
+			handler, err := l.strategy.GetHandler(f.Frame.EtherType)
 			if err != nil {
-				log.Error().Msgf("error during strategy GetHandler: %v\n", err)
+				log.Error().Msgf("error during strategy GetHandler: %v", err)
 				continue
 			}
 
@@ -109,10 +125,10 @@ func (listener *LinkLayerListener) ListenAndServe(ctx context.Context) {
 			if err == ErrDropPdu || err != nil {
 				continue
 			}
-		case frame := <-listener.toInterfaceChannel:
+		case frame := <-l.toInterfaceChannel:
 			var err error
 
-			for _, iface := range listener.interfaces {
+			for _, iface := range l.interfaces {
 				if bytes.Equal(*iface.HardwareAddr, frame.Source) {
 					err = iface.WriteFrame(frame)
 					break
@@ -120,7 +136,7 @@ func (listener *LinkLayerListener) ListenAndServe(ctx context.Context) {
 			}
 
 			if err != nil {
-				log.Error().Msgf("error writing ethernet frame: %v\n", err)
+				log.Error().Msgf("error writing ethernet frame: %v", err)
 				continue
 			}
 		}

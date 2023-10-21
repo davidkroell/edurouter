@@ -25,6 +25,7 @@ type InterfaceConfig struct {
 }
 
 func ParseInterfaceConfig(config string) (*InterfaceConfig, error) {
+	config = strings.TrimSpace(config)
 	splitted := strings.Split(config, ":")
 
 	if len(splitted) != 2 {
@@ -64,6 +65,7 @@ func (i *InterfaceConfig) SetupAndListen(ctx context.Context, supportedEtherType
 	ifi, err := net.InterfaceByName(i.InterfaceName)
 	if err != nil {
 		log.Error().Msgf("failed to open interface: %v", err)
+		return
 	}
 
 	// map real hardware and IP addresses
@@ -114,13 +116,13 @@ func (i *InterfaceConfig) readFramesFromConn(ctx context.Context, mtu int, conn 
 
 		n, _, err := conn.ReadFrom(b)
 		if err != nil {
-			log.Error().Msgf("failed to receive message: %v\n", err)
+			log.Error().Msgf("failed to receive message: %v", err)
 			continue
 		}
 
 		// Unpack Ethernet frame into Go representation.
 		if err := (&f).UnmarshalBinary(b[:n]); err != nil {
-			log.Error().Msgf("failed to unmarshal ethernet frame: %v\n", err)
+			log.Error().Msgf("failed to unmarshal ethernet frame: %v", err)
 			continue
 		}
 
