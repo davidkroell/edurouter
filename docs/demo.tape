@@ -26,7 +26,7 @@ Backspace 10
 
 Sleep 100ms
 
-Type "if add --name wlp0s20f3 -a 192.168.0.50/24"
+Type "if add --interface wlp0s20f3 -a 192.168.0.50/24"
 Enter
 Sleep 100ms
 
