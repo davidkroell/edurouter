@@ -120,6 +120,15 @@ func executor(in string) {
 
 		listener.AddInterface(config)
 	}
+
+	if strings.HasPrefix(in, "if list") {
+		w := tabwriter.NewWriter(os.Stdout, 1, 2, 4, ' ', 0)
+		fmt.Fprintf(w, "%s\t%s\t%s\t%s\n", "INTERFACE", "HW ADDR", "IP (EMULATED)", "IP (REAL)")
+		for _, iface := range listener.Interfaces() {
+			fmt.Fprintf(w, "%s\t%s\t%s\t%s\n", iface.InterfaceName, iface.HardwareAddr, iface.Addr, iface.RealIPAddr)
+		}
+		w.Flush()
+	}
 }
 
 func completer(doc prompt.Document) []prompt.Suggest {
@@ -129,14 +138,14 @@ func completer(doc prompt.Document) []prompt.Suggest {
 
 	// top-level prompt
 	s = []prompt.Suggest{
-		{Text: "version", Description: "Show version"},
+		{Text: "version", Description: "show version"},
 		{Text: "help", Description: "show help"},
-		{Text: "exit", Description: "exit"},
+		{Text: "exit", Description: "exit edurouter"},
 		{Text: "ping", Description: "ping a host"},
 
-		{Text: "route", Description: "Show or print the configured routes"},
-		{Text: "log", Description: "Set or get the log level"},
-		{Text: "if", Description: "Interfaces"},
+		{Text: "route", Description: "show or configure the IP routes"},
+		{Text: "if", Description: "show  or configure the interfaces"},
+		{Text: "log", Description: "show or configure the log level"},
 	}
 
 	// top-level commands
@@ -150,7 +159,7 @@ func completer(doc prompt.Document) []prompt.Suggest {
 	if strings.HasPrefix(text, "route") {
 		s = []prompt.Suggest{
 			{Text: "list", Description: "list all routes"},
-			{Text: "add", Description: "Add a route"},
+			{Text: "add", Description: "add a route"},
 		}
 	}
 
@@ -165,6 +174,7 @@ func completer(doc prompt.Document) []prompt.Suggest {
 
 	if strings.HasPrefix(text, "if") {
 		s = []prompt.Suggest{
+			{Text: "list", Description: "list all interfaces"},
 			{Text: "add", Description: "add an interface"},
 		}
 
