@@ -15,10 +15,10 @@ func interfaceCommands() *cobra.Command {
 	}
 
 	var addr string
-	var name string
+	var iface string
 
 	addCmd := &cobra.Command{
-		Use:   "add --name name -a address",
+		Use:   "add --interface iface -a address",
 		Short: "add an interface",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ip, ipNet, err := net.ParseCIDR(addr)
@@ -29,7 +29,7 @@ func interfaceCommands() *cobra.Command {
 
 			ipNet.IP = ip
 
-			config, err := edurouter.NewInterfaceConfig(name, ipNet)
+			config, err := edurouter.NewInterfaceConfig(iface, ipNet)
 			if err != nil {
 				return err
 			}
@@ -38,7 +38,7 @@ func interfaceCommands() *cobra.Command {
 		},
 	}
 
-	addCmd.Flags().StringVar(&name, "name", "", "")
+	addCmd.Flags().StringVarP(&iface, "interface", "i", "", "")
 	addCmd.Flags().StringVarP(&addr, "address", "a", "", "")
 
 	listCmd := &cobra.Command{

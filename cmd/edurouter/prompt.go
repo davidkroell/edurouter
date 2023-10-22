@@ -15,9 +15,9 @@ import (
 )
 
 var (
-	listener             *edurouter.LinkLayerListener
-	interfaceSuggestions []prompt.Suggest
-	motd                 = `#####################################################################
+	listener            *edurouter.LinkLayerListener
+	availableInterfaces []prompt.Suggest
+	motd                = `#####################################################################
 ###                  __                       __                  ###
 ###        ___  ____/ /_  ___________  __  __/ /____  _____       ###
 ###       / _ \/ __  / / / / ___/ __ \/ / / / __/ _ \/ ___/       ###
@@ -29,14 +29,14 @@ var (
 func initSuggestions() {
 	ifaces, err := net.Interfaces()
 	if err == nil {
-		interfaceSuggestions = []prompt.Suggest{}
+		availableInterfaces = []prompt.Suggest{}
 		for _, i := range ifaces {
 			if i.Name == "lo" {
 				// skip loopback
 				continue
 			}
 
-			interfaceSuggestions = append(interfaceSuggestions, prompt.Suggest{Text: i.Name})
+			availableInterfaces = append(availableInterfaces, prompt.Suggest{Text: i.Name})
 		}
 	}
 }
@@ -88,9 +88,32 @@ func completer(doc prompt.Document) []prompt.Suggest {
 	}
 
 	if strings.HasPrefix(text, "route") {
-		s = []prompt.Suggest{
-			{Text: "list", Description: "list all routes"},
-			{Text: "add", Description: "add a route"},
+		switch argToComplete {
+		case "-i", "--interface":
+			s = []prompt.Suggest{}
+
+			for _, i := range listener.Interfaces() {
+				s = append(s, prompt.Suggest{Text: i.InterfaceName})
+			}
+
+		case "-a":
+			s = []prompt.Suggest{}
+
+		default:
+			s = []prompt.Suggest{
+				{Text: "list", Description: "list all routes"},
+				{Text: "add", Description: "add a route"},
+			}
+
+			if strings.HasPrefix(text, "route add") {
+				s = []prompt.Suggest{
+					{Text: "-i"},
+					{Text: "--interface"},
+					{Text: "-a"},
+					{Text: "--address"},
+					{Text: "--next-hop"},
+				}
+			}
 		}
 	}
 
@@ -105,8 +128,8 @@ func completer(doc prompt.Document) []prompt.Suggest {
 
 	if strings.HasPrefix(text, "if") {
 		switch argToComplete {
-		case "--name":
-			s = interfaceSuggestions
+		case "-i", "--interface":
+			s = availableInterfaces
 		case "-a":
 			s = []prompt.Suggest{}
 
@@ -118,7 +141,8 @@ func completer(doc prompt.Document) []prompt.Suggest {
 
 			if strings.HasPrefix(text, "if add") {
 				s = []prompt.Suggest{
-					{Text: "--name"},
+					{Text: "-i"},
+					{Text: "--interface"},
 					{Text: "-a"},
 				}
 			}

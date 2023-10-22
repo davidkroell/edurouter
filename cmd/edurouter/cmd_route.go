@@ -2,7 +2,9 @@ package main
 
 import (
 	"fmt"
+	"github.com/davidkroell/edurouter"
 	"github.com/spf13/cobra"
+	"net"
 	"text/tabwriter"
 )
 
@@ -33,6 +35,47 @@ func routeCommands() *cobra.Command {
 		},
 	}
 
-	routeCmds.AddCommand(listCmd)
+	var addr string
+	var iface string
+	var nextHop string
+
+	addCmd := &cobra.Command{
+		Use:   "add",
+		Short: "add a route",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			ip, ipNet, err := net.ParseCIDR(addr)
+
+			if err != nil {
+				return err
+			}
+
+			ipNet.IP = ip
+
+			nextHopIP := net.ParseIP(nextHop).To4()
+
+			var outIface *edurouter.InterfaceConfig
+
+			for _, i := range listener.Interfaces() {
+				if i.InterfaceName == iface {
+					outIface = i
+				}
+			}
+
+			listener.RouteTable().AddRoute(edurouter.RouteInfo{
+				RouteType:    edurouter.StaticRouteType,
+				DstNet:       *ipNet,
+				NextHop:      &nextHopIP,
+				OutInterface: outIface,
+			})
+
+			return nil
+		},
+	}
+
+	addCmd.Flags().StringVarP(&iface, "interface", "i", "", "interface")
+	addCmd.Flags().StringVarP(&addr, "address", "a", "", "")
+	addCmd.Flags().StringVar(&nextHop, "next-hop", "", "")
+
+	routeCmds.AddCommand(listCmd, addCmd)
 	return routeCmds
 }

@@ -143,17 +143,6 @@ func (l *LinkLayerListener) ListenAndServe(ctx context.Context) {
 	}
 }
 
-func (l *LinkLayerListener) Interfaces() []InterfaceConfig {
-	ifaces := make([]InterfaceConfig, 0, len(l.interfaces))
-
-	for _, i := range l.interfaces {
-		ifaces = append(ifaces, InterfaceConfig{
-			InterfaceName: i.InterfaceName,
-			HardwareAddr:  i.HardwareAddr,
-			Addr:          i.Addr,
-			RealIPAddr:    i.RealIPAddr,
-		})
-	}
-
-	return ifaces
+func (l *LinkLayerListener) Interfaces() []*InterfaceConfig {
+	return l.interfaces
 }
